@@ -14,6 +14,26 @@ npm start              # MODE=paper par défaut : simulation via les quotes Jupi
 
 Passer en réel : `MODE=live` + `BS58_PRIVATE_KEY` d'un **wallet dédié** contenant seulement ce qu'on accepte de perdre.
 
+## Docker / VPS
+
+Un seul conteneur, jamais plus : PumpPortal bannit l'IP au-delà d'une connexion WebSocket, et deux instances achèteraient deux fois le même token.
+
+```bash
+docker compose up -d --build   # base dans ./data/bottofun.db, relance automatique
+docker compose logs -f
+```
+
+Déploiement sur un VPS (Hetzner Falkenstein/Nuremberg, proche de Francfort) :
+
+```bash
+git clone git@github.com:sl11me/BotToFun.git && cd BotToFun
+cp .env.example .env && chmod 600 .env   # RPC_URL obligatoire pour tourner 24/7
+mkdir -p data && sudo chown 1000:1000 data   # l'utilisateur node du conteneur doit pouvoir écrire
+docker compose up -d --build
+```
+
+Mise à jour : `git pull && docker compose up -d --build`. Arrêter le bot local avant de lancer celui du VPS si les deux partagent la même IP.
+
 ## Fonctionnement
 
 1. `src/feed.ts` — WebSocket PumpPortal, événements `create` des nouveaux tokens.

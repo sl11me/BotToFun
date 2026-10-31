@@ -1,0 +1,18 @@
+services:
+  bot:
+    build: .
+    image: bottofun
+    container_name: bottofun
+    restart: unless-stopped
+    # .env optionnel : sans lui, le bot tourne en paper avec les valeurs par défaut.
+    env_file:
+      - path: .env
+        required: false
+    # Montage hôte (et non volume nommé) : les agents lancés sur l'hôte lisent bottofun.db directement.
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
