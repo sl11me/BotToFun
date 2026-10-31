@@ -1,11 +1,11 @@
 {
   "name": "bottofun",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/bot.ts",
+    "start": "node --no-warnings --env-file-if-exists=.env src/bot.ts",
     "test": "node --test",
     "typecheck": "tsc --noEmit"
   },

@@ -9,6 +9,8 @@ Bot de trading memecoins pump.fun en TypeScript. Node ≥ 24 exécute le `.ts` d
 
 ## Pièges
 
+- Compte bonding curve : `[8 discriminator][vTokens u64][vSol u64][realTokens][realSol][supply][complete u8 @48]`. Certaines curves (cotées USDC ?) ont un vSol aberrant : les filtres mcap/inflow les rejettent.
+- ipfs.io ne sert plus de JSON : métadonnées via `pump.mypinata.cloud/ipfs/<cid>`.
 - Jupiter renvoie 400 « not a valid token mint » pendant les premières secondes d'un token : il n'est pas encore indexé.
 - PumpPortal : une seule connexion WebSocket à la fois, sinon ban IP d'1h. `subscribeTokenTrade` est payant.
 - Jupiter Swap V1 (`/swap/v1/quote`) est déprécié : utiliser V2 `/order` + `/execute`.

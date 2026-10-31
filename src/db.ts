@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { config } from "./config.ts";
+import type { NewToken } from "./strategy.ts";
 
 const db = new DatabaseSync(config.dbPath);
 db.exec(`
@@ -7,21 +8,55 @@ db.exec(`
     mint TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
     mode TEXT NOT NULL,
+    bonding_curve TEXT NOT NULL,
     cost_lamports TEXT NOT NULL,
     token_amount TEXT NOT NULL,
+    peak_lamports TEXT NOT NULL,
     opened_at INTEGER NOT NULL,
     closed_at INTEGER,
     proceeds_lamports TEXT,
     exit_reason TEXT
-  )
+  );
+  -- Tous les tokens vus et la décision prise : matière première de l'analyse (agent d'apprentissage).
+  CREATE TABLE IF NOT EXISTS tokens (
+    mint TEXT PRIMARY KEY,
+    symbol TEXT,
+    name TEXT,
+    creator TEXT,
+    bonding_curve TEXT,
+    created_at INTEGER NOT NULL,
+    dev_buy_sol REAL,
+    mcap_sol REAL,
+    mayhem INTEGER,
+    decision TEXT
+  );
 `);
 
-export type Position = { mint: string; symbol: string; costLamports: bigint; tokenAmount: bigint; openedAt: number };
+export type Position = {
+  mint: string;
+  symbol: string;
+  bondingCurve: string;
+  costLamports: bigint;
+  tokenAmount: bigint;
+  peakLamports: bigint;
+  openedAt: number;
+};
 
-export function openPosition(p: Position) {
+export function logToken(t: NewToken, decision: string) {
   db.prepare(
-    "INSERT INTO positions (mint, symbol, mode, cost_lamports, token_amount, opened_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(p.mint, p.symbol, config.mode, p.costLamports.toString(), p.tokenAmount.toString(), p.openedAt);
+    `INSERT INTO tokens (mint, symbol, name, creator, bonding_curve, created_at, dev_buy_sol, mcap_sol, mayhem, decision)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(mint) DO UPDATE SET decision = excluded.decision`,
+  ).run(t.mint, t.symbol, t.name, t.traderPublicKey, t.bondingCurveKey, Date.now(), t.solAmount, t.marketCapSol, t.is_mayhem_mode ? 1 : 0, decision);
+}
+
+export function openPosition(p: Omit<Position, "peakLamports">) {
+  db.prepare(
+    "INSERT INTO positions (mint, symbol, mode, bonding_curve, cost_lamports, token_amount, peak_lamports, opened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(p.mint, p.symbol, config.mode, p.bondingCurve, p.costLamports.toString(), p.tokenAmount.toString(), p.costLamports.toString(), p.openedAt);
+}
+
+export function updatePeak(mint: string, peak: bigint) {
+  db.prepare("UPDATE positions SET peak_lamports = ? WHERE mint = ?").run(peak.toString(), mint);
 }
 
 export function closePosition(mint: string, proceedsLamports: bigint, reason: string) {
@@ -40,8 +75,10 @@ export function openPositions(): Position[] {
     .map((r: any) => ({
       mint: r.mint,
       symbol: r.symbol,
+      bondingCurve: r.bonding_curve,
       costLamports: BigInt(r.cost_lamports),
       tokenAmount: BigInt(r.token_amount),
+      peakLamports: BigInt(r.peak_lamports),
       openedAt: r.opened_at,
     }));
 }
