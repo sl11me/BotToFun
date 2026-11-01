@@ -46,7 +46,8 @@ export function logToken(t: NewToken, decision: string) {
   db.prepare(
     `INSERT INTO tokens (mint, symbol, name, creator, bonding_curve, created_at, dev_buy_sol, mcap_sol, mayhem, decision)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(mint) DO UPDATE SET decision = excluded.decision`,
-  ).run(t.mint, t.symbol, t.name, t.traderPublicKey, t.bondingCurveKey, Date.now(), t.solAmount, t.marketCapSol, t.is_mayhem_mode ? 1 : 0, decision);
+  // PumpPortal omet parfois symbol ou bondingCurveKey : SQLite refuse undefined.
+  ).run(t.mint, t.symbol ?? null, t.name ?? null, t.traderPublicKey ?? null, t.bondingCurveKey ?? null, Date.now(), t.solAmount ?? null, t.marketCapSol ?? null, t.is_mayhem_mode ? 1 : 0, decision);
 }
 
 export function openPosition(p: Omit<Position, "peakLamports">) {
