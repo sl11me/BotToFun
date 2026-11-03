@@ -28,6 +28,8 @@ const live = config.mode === "live";
 const busy = new Set<string>(); // mints en cours d'évaluation/achat/vente, évite les doubles ordres
 const lamports = (sol: number) => BigInt(Math.round(sol * 1e9));
 const txCost = lamports(config.txCostSol);
+let evaluating = 0; // tokens en cours d'évaluation (attente du délai comprise)
+let buying = 0; // achats en cours : places de position réservées
 const values = new Map<string, bigint>(); // dernière valeur de revente de chaque position, pour le dashboard
 // Holder hors courbe ed25519 = compte de programme (bonding curve, pool, coffre), pas un wallet : exclu de l'analyse.
 // shortcut: un multisig (PDA) qui accumule passerait inaperçu ; à affiner si RugCheck le signale.
@@ -76,25 +78,32 @@ async function evaluateLaunch(l: Launch): Promise<string> {
 
 /** Simulation achat + revente, puis achat (live) ou position simulée (paper). `curve` : prix local pump.fun. */
 async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve: string, curve?: Curve): Promise<string> {
-  // Simulation achat puis revente : un token invendable (honeypot) ou trop taxé échoue ici.
-  const spend = lamports(config.buySol);
-  const simulated = await quote(SOL_MINT, t.mint, spend)
-    .then(async (out) => ({ out, back: await quote(t.mint, SOL_MINT, out) }))
-    .catch((e) => e as Error);
-  if (simulated instanceof Error) {
-    console.error(`[sim] ${t.symbol} ${t.mint}: ${simulated.message}`);
-    // Message court et stable : la réponse Jupiter contient un requestId qui éclaterait l'entonnoir du dashboard.
-    return simulated.message.startsWith("/order") ? "simulation impossible : aucune route Jupiter" : `simulation impossible : ${simulated.name}`;
-  }
-  const roundTrip = roundTripReason(spend, simulated.back, config.maxRoundTripLossPct);
-  if (roundTrip) return roundTrip;
+  // Place réservée dès maintenant : deux évaluations qui finissent ensemble ne doivent pas dépasser la limite.
+  if (openPositions().length + buying >= config.maxOpenPositions) return "capacité max";
+  buying++;
+  try {
+    // Simulation achat puis revente : un token invendable (honeypot) ou trop taxé échoue ici.
+    const spend = lamports(config.buySol);
+    const simulated = await quote(SOL_MINT, t.mint, spend)
+      .then(async (out) => ({ out, back: await quote(t.mint, SOL_MINT, out) }))
+      .catch((e) => e as Error);
+    if (simulated instanceof Error) {
+      console.error(`[sim] ${t.symbol} ${t.mint}: ${simulated.message}`);
+      // Message court et stable : la réponse Jupiter contient un requestId qui éclaterait l'entonnoir du dashboard.
+      return simulated.message.startsWith("/order") ? "simulation impossible : aucune route Jupiter" : `simulation impossible : ${simulated.name}`;
+    }
+    const roundTrip = roundTripReason(spend, simulated.back, config.maxRoundTripLossPct);
+    if (roundTrip) return roundTrip;
 
-  const tokenAmount = live ? (await swap(SOL_MINT, t.mint, spend)).outAmount : curve ? buyQuote(curve, spend) : simulated.out;
-  // Coût complet : mise + frais de transaction + rent du compte de token (Jupiter ne le referme pas).
-  const cost = spend + txCost + lamports(config.ataRentSol);
-  openPosition({ mint: t.mint, symbol: t.symbol, bondingCurve, costLamports: cost, tokenAmount, openedAt: Date.now() });
-  console.log(`[buy] ${t.symbol} ${t.mint} : ${config.buySol} SOL -> ${tokenAmount} tokens${curve ? ` (mcap ${mcapSol(curve)} SOL)` : ""}`);
-  return "achat";
+    const tokenAmount = live ? (await swap(SOL_MINT, t.mint, spend)).outAmount : curve ? buyQuote(curve, spend) : simulated.out;
+    // Coût complet : mise + frais de transaction + rent du compte de token (Jupiter ne le referme pas).
+    const cost = spend + txCost + lamports(config.ataRentSol);
+    openPosition({ mint: t.mint, symbol: t.symbol, bondingCurve, costLamports: cost, tokenAmount, openedAt: Date.now() });
+    console.log(`[buy] ${t.symbol} ${t.mint} : ${config.buySol} SOL -> ${tokenAmount} tokens${curve ? ` (mcap ${mcapSol(curve)} SOL)` : ""}`);
+    return "achat";
+  } finally {
+    buying--;
+  }
 }
 
 async function check(p: Position) {
@@ -129,9 +138,11 @@ async function guarded(mint: string, fn: () => Promise<unknown>) {
 /** Point d'entrée commun aux flux : un mint n'est évalué qu'une fois, dans la limite des positions. */
 function consider(t: Launch, run: () => Promise<string>) {
   if (busy.has(t.mint) || isKnown(t.mint)) return;
-  if (openPositions().length + busy.size >= config.maxOpenPositions) return logToken(t, "capacité max");
+  // La limite de positions est vérifiée à l'achat ; ici on borne seulement la charge (RPC, RugCheck, Jupiter).
+  if (evaluating >= config.maxEvaluations) return logToken(t, "trop d'évaluations en cours");
   logToken(t, "en évaluation");
-  void guarded(t.mint, async () => logToken(t, await run().catch((e) => `erreur : ${(e as Error).message}`)));
+  evaluating++;
+  void guarded(t.mint, async () => logToken(t, await run().catch((e) => `erreur : ${(e as Error).message}`))).finally(() => evaluating--);
 }
 
 onNewToken((t) => {

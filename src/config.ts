@@ -16,6 +16,7 @@ export const config = {
   pumpPortalApiKey: process.env.PUMPPORTAL_API_KEY ?? "",
   buySol: num("BUY_SOL", 0.05),
   maxOpenPositions: num("MAX_OPEN_POSITIONS", 3),
+  maxEvaluations: num("MAX_EVALUATIONS", 10), // tokens évalués en parallèle (chacun attend ENTRY_DELAY_SECONDS)
   txCostSol: num("TX_COST_SOL", 0.0002),
   ataRentSol: num("ATA_RENT_SOL", 0.00204),
   takeProfitPct: num("TAKE_PROFIT_PCT", 40),
