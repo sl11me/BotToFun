@@ -58,3 +58,30 @@ export async function swap(inputMint: string, outputMint: string, amount: bigint
   if (r.status !== "Success") throw new Error(`swap échoué (code ${r.code}) ${r.signature ?? ""} ${r.error ?? ""}`);
   return { signature: r.signature, outAmount: BigInt(r.totalOutputAmount) };
 }
+
+// Tokens API v2 : https://developers.jup.ag/docs/api-reference/tokens
+export type JupToken = {
+  id: string;
+  name: string;
+  symbol: string;
+  dev?: string | null;
+  launchpad?: string | null;
+  firstPool?: { id: string; createdAt: string } | null;
+  telegram?: string | null;
+  liquidity: number | null;
+  mcap: number | null;
+  usdPrice: number | null;
+  stats5m?: { buyVolume?: number; sellVolume?: number } | null;
+};
+
+async function tokensApi(path: string): Promise<JupToken[]> {
+  const res = await fetch(`https://api.jup.ag/tokens/v2/${path}`, { headers, signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`tokens/${path.split("?")[0]} ${res.status}`);
+  return res.json() as Promise<JupToken[]>;
+}
+
+/** Tokens dont la première pool vient d'être créée, toutes plateformes confondues (~30 derniers). */
+export const recentTokens = () => tokensApi("recent");
+
+/** Données à jour (prix, liquidité, volumes, réseaux sociaux) d'un ou plusieurs mints. */
+export const tokenInfo = (mints: string[]) => tokensApi(`search?query=${mints.join(",")}`);

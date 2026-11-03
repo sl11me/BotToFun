@@ -57,6 +57,10 @@
     <div class="scroll" id="open"></div>
   </section>
   <section>
+    <h2>Plateformes (dernière heure)</h2>
+    <div id="platforms"></div>
+  </section>
+  <section>
     <h2>Entonnoir de décision (dernière heure)</h2>
     <div id="funnel"></div>
   </section>
@@ -86,7 +90,7 @@ const fmt = (n, d = 4) => (n == null ? "—" : Number(n).toFixed(d));
 const signed = (n, d = 4, suffix = "") => n == null ? "—" : `<span class="${n >= 0 ? "pos" : "neg"}">${n >= 0 ? "+" : ""}${Number(n).toFixed(d)}${suffix}</span>`;
 const time = (ms) => new Date(ms).toLocaleTimeString("fr-FR");
 const ago = (s) => (s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
-const coin = (mint, label) => `<a href="https://pump.fun/coin/${encodeURIComponent(mint)}" target="_blank" rel="noopener noreferrer">${esc(label || mint.slice(0, 6))}</a>`;
+const coin = (mint, label) => `<a href="${mint.endsWith("pump") ? "https://pump.fun/coin/" : "https://solscan.io/token/"}${encodeURIComponent(mint)}" target="_blank" rel="noopener noreferrer">${esc(label || mint.slice(0, 6))}</a>`;
 const table = (head, rows) => rows.length ? `<table><tr>${head.map((h) => `<th class="${h.endsWith(" ") ? "r" : ""}">${h.trim()}</th>`).join("")}</tr>${rows.join("")}</table>` : `<p class="muted">Rien pour l'instant.</p>`;
 const decisionClass = (d) => d === "achat" ? "pos" : d === "en évaluation" ? "warn" : d.startsWith("erreur") ? "neg" : "muted";
 
@@ -132,8 +136,11 @@ async function refresh() {
   const fmax = Math.max(1, ...funnel.map((f) => f[1]));
   $("funnel").innerHTML = funnel.length ? funnel.map(([k, n]) => `<div class="bar"><span class="label ${decisionClass(k)}" title="${esc(k)}">${esc(k)}</span><div style="width:${(n / fmax) * 100}%${k === "achat" ? ";background:var(--green)" : ""}"></div><span class="muted">${n}</span></div>`).join("") : `<p class="muted">Aucun token depuis une heure.</p>`;
 
-  $("tokens").innerHTML = table(["Heure", "Token", "Dev buy ", "Mcap ", "Décision"], s.tokens.map((t) =>
-    `<tr><td class="muted">${time(t.created_at)}</td><td>${coin(t.mint, t.symbol)}</td><td class="r">${fmt(t.dev_buy_sol, 2)}</td><td class="r">${fmt(t.mcap_sol, 1)}</td><td class="${decisionClass(t.decision ?? "")}">${esc(t.decision)}</td></tr>`));
+  $("platforms").innerHTML = table(["Plateforme", "Tokens vus ", "Achats ", "Suivie"], s.platforms.map((p) =>
+    `<tr><td>${esc(p.platform)}</td><td class="r">${p.seen}</td><td class="r">${p.bought ?? 0}</td><td>${r.platforms.includes(p.platform) ? "oui" : '<span class="muted">non</span>'}</td></tr>`));
+
+  $("tokens").innerHTML = table(["Heure", "Plateforme", "Token", "Dev buy ", "Mcap ", "Décision"], s.tokens.map((t) =>
+    `<tr><td class="muted">${time(t.created_at)}</td><td class="muted">${esc(t.platform ?? "pump.fun")}</td><td>${coin(t.mint, t.symbol)}</td><td class="r">${fmt(t.dev_buy_sol, 2)}</td><td class="r">${fmt(t.mcap_sol, 1)}</td><td class="${decisionClass(t.decision ?? "")}">${esc(t.decision)}</td></tr>`));
 
   $("closed").innerHTML = table(["Fermé", "Token", "PnL ", "PnL % ", "Durée ", "Sortie"], s.closed.map((c) =>
     `<tr><td class="muted">${time(c.closed_at)}</td><td>${coin(c.mint, c.symbol)}</td><td class="r">${signed(c.proceeds - c.cost)}</td><td class="r">${signed(((c.proceeds - c.cost) / c.cost) * 100, 1, "%")}</td><td class="r">${ago((c.closed_at - c.opened_at) / 1000)}</td><td>${esc(c.exit_reason)}</td></tr>`));

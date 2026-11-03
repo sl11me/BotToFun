@@ -13,7 +13,33 @@ export type NewToken = {
   vSolInBondingCurve: number; // SOL virtuels juste après la création (achat du dev inclus)
   pool?: string;
   is_mayhem_mode?: boolean;
+  platform?: string;
 };
+
+/** Lancement vu par le flux multi-plateformes (hors pump.fun) : les données de marché viennent de Jupiter. */
+export type Launch = { mint: string; name: string; symbol: string; traderPublicKey: string; platform: string };
+
+// Programme propriétaire de la première pool → plateforme, quand Jupiter ne donne pas de launchpad.
+const PLATFORM_PROGRAMS: Record<string, string> = {
+  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8": "raydium", // AMM v4
+  CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C: "raydium", // CPMM
+  CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK: "raydium", // CLMM
+  LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj: "letsbonk", // Raydium LaunchLab
+  dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN: "meteora-dbc",
+  MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG: "moonshot",
+};
+
+/** Plateforme d'un token à partir du `launchpad` Jupiter, sinon du programme de sa première pool. */
+export function platformOf(launchpad: string | null | undefined, poolProgram?: string): string | null {
+  const l = launchpad?.toLowerCase() ?? "";
+  if (l.includes("pump")) return "pump.fun";
+  if (l.includes("bonk")) return "letsbonk";
+  if (l.includes("dbc")) return "meteora-dbc";
+  if (l.includes("moon")) return "moonshot";
+  if (l.includes("raydium") || l.includes("launchlab")) return "raydium";
+  if (l) return l;
+  return (poolProgram && PLATFORM_PROGRAMS[poolProgram]) || null;
+}
 
 export type EntryRules = { minDevBuySol: number; maxDevBuySol: number; maxMcapSol: number };
 
@@ -123,6 +149,7 @@ export type RugReport = {
   risks: { name: string; level: string }[] | null;
   topHolders: { owner: string; pct: number; insider: boolean }[] | null;
   creatorTokens: { createdAt: string }[] | null;
+  tokenMeta?: { uri?: string } | null; // URI des métadonnées, quelle que soit la plateforme
 };
 
 export type SecurityRules = {
@@ -133,14 +160,30 @@ export type SecurityRules = {
   maxCreatorLaunches24h: number;
 };
 
-/** Score RugCheck, répartition des holders (hors bonding curve) et historique du créateur. */
-export function rugReason(r: RugReport, bondingCurve: string, now: number, rules: SecurityRules): string | null {
+/** Données de marché Jupiter (USD) utiles à l'entrée hors pump.fun. */
+export type Market = { liquidity: number | null; mcap: number | null; stats5m?: { buyVolume?: number; sellVolume?: number } | null };
+
+/** Équivalent de liquidité / mcap / inflow de la curve pump.fun, en SOL, pour les autres plateformes. */
+export function marketReason(m: Market, solUsd: number, r: { minLiquiditySol: number; maxMcapSol: number; minInflowSol: number }): string | null {
+  const liquidity = (m.liquidity ?? 0) / solUsd;
+  if (liquidity < r.minLiquiditySol) return `liquidité ${liquidity.toFixed(2)} SOL < ${r.minLiquiditySol}`;
+  const mcap = (m.mcap ?? Infinity) / solUsd;
+  if (mcap > r.maxMcapSol) return `mcap ${mcap.toFixed(1)} > ${r.maxMcapSol} après délai`;
+  const inflow = ((m.stats5m?.buyVolume ?? 0) - (m.stats5m?.sellVolume ?? 0)) / solUsd;
+  return inflow < r.minInflowSol ? `inflow ${inflow.toFixed(2)} SOL < ${r.minInflowSol}` : null;
+}
+
+/**
+ * Score RugCheck, répartition des holders et historique du créateur.
+ * `isPool` écarte les comptes de programme (bonding curve, pool, coffre) : ils détiennent les tokens non vendus.
+ */
+export function rugReason(r: RugReport, isPool: (owner: string) => boolean, now: number, rules: SecurityRules): string | null {
   // Les risques « danger » incluent l'historique de rug du créateur.
   const danger = r.risks?.find((x) => x.level === "danger");
   if (danger) return `rugcheck : ${danger.name}`;
   if (r.score_normalised > rules.maxRugScore) return `rugcheck score ${r.score_normalised} > ${rules.maxRugScore}`;
 
-  const holders = (r.topHolders ?? []).filter((h) => h.owner !== bondingCurve).sort((a, b) => b.pct - a.pct);
+  const holders = (r.topHolders ?? []).filter((h) => !isPool(h.owner)).sort((a, b) => b.pct - a.pct);
   const biggest = holders[0]?.pct ?? 0;
   if (biggest > rules.maxHolderPct) return `plus gros holder ${biggest.toFixed(1)}% > ${rules.maxHolderPct}`;
   const top10 = holders.slice(0, 10).reduce((a, h) => a + h.pct, 0);

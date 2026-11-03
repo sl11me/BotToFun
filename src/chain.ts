@@ -16,13 +16,30 @@ export async function fetchCurve(bondingCurveKey: string): Promise<Curve> {
   return { vTokens: b.readBigUInt64LE(8), vSol: b.readBigUInt64LE(16), complete: b[48] === 1 };
 }
 
-/** JSON de métadonnées du token. ipfs.io ne sert plus de JSON : on passe par la passerelle de pump.fun. */
+// ipfs.io, dweb.link, w3s.link… ne servent plus de JSON (page « service worker gateway ») : passerelles testées le 03/11/2026.
+const IPFS_GATEWAYS = ["https://pump.mypinata.cloud/ipfs/", "https://gateway.pinata.cloud/ipfs/", "https://4everland.io/ipfs/"];
+
+/** JSON de métadonnées du token, en essayant chaque passerelle IPFS tant que la précédente refuse (403, 429…). */
 export async function fetchMetadata(uri: string): Promise<Record<string, unknown>> {
   const cid = uri.split("/ipfs/")[1];
-  const url = cid ? `https://pump.mypinata.cloud/ipfs/${cid}` : uri;
-  const res = await fetch(url, { signal: AbortSignal.timeout(4_000) });
-  if (!res.ok) throw new Error(`métadonnées ${res.status}`);
-  return res.json() as Promise<Record<string, unknown>>;
+  let status = 0;
+  for (const url of cid ? IPFS_GATEWAYS.map((g) => g + cid) : [uri]) {
+    const res = await fetch(url, { signal: AbortSignal.timeout(4_000) }).catch(() => null);
+    if (res?.ok) return res.json() as Promise<Record<string, unknown>>;
+    status = res?.status ?? 0;
+  }
+  throw new Error(`métadonnées ${status}`);
+}
+
+/** Programme propriétaire d'un compte (sert à reconnaître la plateforme d'une pool). */
+export async function accountOwner(address: string): Promise<string | undefined> {
+  const res = await fetch(config.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [address, { encoding: "base64", dataSlice: { offset: 0, length: 0 } }] }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  return ((await res.json()) as any).result?.value?.owner;
 }
 
 /** Compte mint on-chain : programme, autorités et extensions Token-2022. */

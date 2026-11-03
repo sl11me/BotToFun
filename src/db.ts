@@ -28,9 +28,13 @@ db.exec(`
     dev_buy_sol REAL,
     mcap_sol REAL,
     mayhem INTEGER,
-    decision TEXT
+    decision TEXT,
+    platform TEXT
   );
 `);
+// Migration des bases créées avant le suivi multi-plateformes.
+if (!(db.prepare("PRAGMA table_info(tokens)").all() as { name: string }[]).some((c) => c.name === "platform"))
+  db.exec("ALTER TABLE tokens ADD COLUMN platform TEXT");
 
 export type Position = {
   mint: string;
@@ -42,12 +46,13 @@ export type Position = {
   openedAt: number;
 };
 
-export function logToken(t: NewToken, decision: string) {
+/** Token vu par un des flux : pump.fun (NewToken complet) ou autre plateforme (champs de base seulement). */
+export function logToken(t: Pick<NewToken, "mint" | "name" | "symbol" | "traderPublicKey"> & Partial<NewToken>, decision: string) {
   db.prepare(
-    `INSERT INTO tokens (mint, symbol, name, creator, bonding_curve, created_at, dev_buy_sol, mcap_sol, mayhem, decision)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(mint) DO UPDATE SET decision = excluded.decision`,
+    `INSERT INTO tokens (mint, symbol, name, creator, bonding_curve, created_at, dev_buy_sol, mcap_sol, mayhem, decision, platform)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(mint) DO UPDATE SET decision = excluded.decision`,
   // PumpPortal omet parfois symbol ou bondingCurveKey : SQLite refuse undefined.
-  ).run(t.mint, t.symbol ?? null, t.name ?? null, t.traderPublicKey ?? null, t.bondingCurveKey ?? null, Date.now(), t.solAmount ?? null, t.marketCapSol ?? null, t.is_mayhem_mode ? 1 : 0, decision);
+  ).run(t.mint, t.symbol ?? null, t.name ?? null, t.traderPublicKey ?? null, t.bondingCurveKey ?? null, Date.now(), t.solAmount ?? null, t.marketCapSol ?? null, t.is_mayhem_mode ? 1 : 0, decision, t.platform ?? null);
 }
 
 export function openPosition(p: Omit<Position, "peakLamports">) {
@@ -84,8 +89,9 @@ export function openPositions(): Position[] {
     }));
 }
 
-export function hasTraded(mint: string) {
-  return db.prepare("SELECT 1 FROM positions WHERE mint = ?").get(mint) !== undefined;
+/** Token déjà vu : évite de réévaluer un mint signalé par deux flux (LetsBonk arrive par PumpPortal et Jupiter). */
+export function isKnown(mint: string) {
+  return db.prepare("SELECT 1 FROM tokens WHERE mint = ?").get(mint) !== undefined;
 }
 
 export function realizedPnlSol(): number {
@@ -100,7 +106,10 @@ export function realizedPnlSol(): number {
 /** Lectures du tableau de bord : derniers tokens, décisions et débit depuis `since` (ms), trades fermés. */
 export function dashboardData(since: number) {
   return {
-    tokens: db.prepare("SELECT mint, symbol, created_at, dev_buy_sol, mcap_sol, decision FROM tokens ORDER BY created_at DESC LIMIT 60").all(),
+    tokens: db.prepare("SELECT mint, symbol, created_at, dev_buy_sol, mcap_sol, decision, platform FROM tokens ORDER BY created_at DESC LIMIT 60").all(),
+    platforms: db
+      .prepare("SELECT COALESCE(platform, 'pump.fun') AS platform, COUNT(*) AS seen, SUM(decision = 'achat') AS bought FROM tokens WHERE created_at >= ? GROUP BY 1 ORDER BY 2 DESC")
+      .all(since),
     decisions: db.prepare("SELECT decision, COUNT(*) AS n FROM tokens WHERE created_at >= ? GROUP BY 1").all(since) as { decision: string; n: number }[],
     perMinute: db.prepare("SELECT created_at / 60000 AS m, COUNT(*) AS n FROM tokens WHERE created_at >= ? GROUP BY 1").all(since),
     closed: db

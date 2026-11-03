@@ -1,8 +1,18 @@
 # Brigitte
 
-Bot de trading de memecoins Solana (repo `BotToFun`), source actuelle pump.fun : détecte les nouveaux tokens, filtre, entre, sort sur TP / SL / timeout.
+Bot de trading de memecoins Solana (repo `BotToFun`) sur pump.fun, LetsBonk, Raydium, Meteora DBC et Moonshot : détecte les nouveaux tokens, filtre, entre, sort sur TP / SL / timeout.
 
 Stack (voir `Technos.png`) : TypeScript (Node ≥ 24), Jupiter Swap V2, SQLite (`node:sqlite`), flux PumpPortal.
+
+## Plateformes
+
+| Plateforme | Détection | Prix |
+|---|---|---|
+| pump.fun | PumpPortal (temps réel) | bonding curve on-chain |
+| LetsBonk | PumpPortal (`pool: bonk`) + Jupiter | Jupiter |
+| Raydium, Meteora DBC, Moonshot | liste Jupiter des tokens récents (`LAUNCH_POLL_SECONDS`) | Jupiter |
+
+La plateforme vient du champ `launchpad` de Jupiter, sinon du programme propriétaire de la première pool. Les pools créées directement sur PumpSwap ou Meteora DAMM ne sont pas suivies. `PLATFORMS` choisit les plateformes actives. Hors pump.fun, la liquidité, le mcap et l'inflow (volume d'achat moins volume de vente sur 5 min) viennent de Jupiter, convertis en SOL, avec les mêmes seuils.
 
 ## Démarrage
 
@@ -42,7 +52,7 @@ Mise à jour : `git pull && docker compose up -d --build`. Arrêter le bot local
 
 ## Fonctionnement
 
-1. `src/feed.ts` — WebSocket PumpPortal, événements `create` des nouveaux tokens.
+1. `src/feed.ts` — WebSocket PumpPortal (pump.fun, LetsBonk) et liste Jupiter des tokens récents (autres plateformes).
 2. `src/strategy.ts` — règles pures : filtres d'entrée, maths de la bonding curve (frais 1,25 %), sorties TP / SL / trailing / timeout.
 3. `src/chain.ts` — lecture on-chain de la bonding curve (RPC) et des métadonnées du token.
 4. `src/jupiter.ts` — order + sign + execute (live) via `api.jup.ag/swap/v2`, et prix des tokens migrés.
@@ -63,7 +73,7 @@ Chaque contrôle qui échoue, ou qui ne peut pas être fait (RPC, RugCheck ou Ju
 | Extensions Token-2022 | mint on-chain | seules `metadataPointer` et `tokenMetadata` sont admises : pump.fun crée tous ses tokens en Token-2022 avec ces deux-là ; `transferHook`, `transferFeeConfig`, `permanentDelegate`, `pausable`… sont rejetées |
 | Liquidité | bonding curve | ≥ `MIN_LIQUIDITY_SOL` SOL réels |
 | Score RugCheck | api.rugcheck.xyz | aucun risque « danger » (dont l'historique de rug du créateur) et score ≤ `MAX_RUG_SCORE` |
-| Holders | RugCheck | hors bonding curve : plus gros ≤ `MAX_HOLDER_PCT`, top 10 ≤ `MAX_TOP10_PCT`, insiders ≤ `MAX_INSIDER_PCT` |
+| Holders | RugCheck | hors comptes de programme (bonding curve, pool, coffre) : plus gros ≤ `MAX_HOLDER_PCT`, top 10 ≤ `MAX_TOP10_PCT`, insiders ≤ `MAX_INSIDER_PCT` |
 | Créateur | RugCheck + base locale | ≤ `MAX_CREATOR_LAUNCHES_24H` lancements en 24 h ; liste noire si un de ses tokens nous a coûté ≥ `RUG_LOSS_PCT` % |
 | Honeypot | quotes Jupiter | achat puis revente simulés : il faut une route de vente et une perte d'aller-retour ≤ `MAX_ROUNDTRIP_LOSS_PCT` (~3 % normal) | En paper, le prix vient de la curve on-chain et le coût inclut frais, tx et rent : les résultats sont pessimistes plutôt qu'optimistes.
 

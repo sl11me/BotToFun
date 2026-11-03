@@ -40,6 +40,9 @@ export const config = {
   minLiquiditySol: num("MIN_LIQUIDITY_SOL", 4),
   maxRoundTripLossPct: num("MAX_ROUNDTRIP_LOSS_PCT", 6),
   rugLossPct: num("RUG_LOSS_PCT", 50), // perte qui met le créateur sur liste noire
+  // Plateformes suivies : pump.fun (PumpPortal) + les autres via la liste Jupiter des tokens récents.
+  platforms: (process.env.PLATFORMS ?? "pump.fun,letsbonk,raydium,meteora-dbc,moonshot").split(",").map((p) => p.trim()),
+  launchPollSeconds: num("LAUNCH_POLL_SECONDS", 10),
   dashboardPort: num("DASHBOARD_PORT", 8080), // 0 = désactivé
   dashboardHost: process.env.DASHBOARD_HOST || "127.0.0.1",
 };

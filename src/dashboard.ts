@@ -36,6 +36,7 @@ function state(liveValue: (mint: string) => bigint | undefined) {
     funnel,
     perMinute: d.perMinute,
     tokens: d.tokens,
+    platforms: d.platforms,
     open: openPositions().map((p) => {
       const value = liveValue(p.mint);
       return { mint: p.mint, symbol: p.symbol, cost: sol(p.costLamports), value: value === undefined ? null : sol(value), peak: sol(p.peakLamports), openedAt: p.openedAt };
