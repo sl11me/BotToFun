@@ -6,7 +6,7 @@ export async function fetchCurve(bondingCurveKey: string): Promise<Curve> {
   const res = await fetch(config.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [bondingCurveKey, { encoding: "base64" }] }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [bondingCurveKey, { encoding: "base64", commitment: "confirmed" }] }),
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) throw new Error(`RPC ${res.status}`);
@@ -36,18 +36,19 @@ export async function accountOwner(address: string): Promise<string | undefined>
   const res = await fetch(config.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [address, { encoding: "base64", dataSlice: { offset: 0, length: 0 } }] }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [address, { encoding: "base64", commitment: "confirmed", dataSlice: { offset: 0, length: 0 } }] }),
     signal: AbortSignal.timeout(5_000),
   });
   return ((await res.json()) as any).result?.value?.owner;
 }
 
+// commitment "confirmed" : avec "finalized" (défaut), un mint créé il y a moins de ~15 s est encore introuvable.
 /** Compte mint on-chain : programme, autorités et extensions Token-2022. */
 export async function fetchMint(mint: string): Promise<MintInfo> {
   const res = await fetch(config.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [mint, { encoding: "jsonParsed" }] }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [mint, { encoding: "jsonParsed", commitment: "confirmed" }] }),
     signal: AbortSignal.timeout(5_000),
   });
   if (!res.ok) throw new Error(`RPC ${res.status}`);
