@@ -43,8 +43,9 @@ export async function accountOwner(address: string): Promise<string | undefined>
 }
 
 // commitment "confirmed" : avec "finalized" (défaut), un mint créé il y a moins de ~15 s est encore introuvable.
+// PumpPortal annonce le token dès la transaction traitée, ~1 s avant confirmation : on relit jusqu'à 3 fois.
 /** Compte mint on-chain : programme, autorités et extensions Token-2022. */
-export async function fetchMint(mint: string): Promise<MintInfo> {
+export async function fetchMint(mint: string, attempt = 1): Promise<MintInfo> {
   const res = await fetch(config.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -54,7 +55,11 @@ export async function fetchMint(mint: string): Promise<MintInfo> {
   if (!res.ok) throw new Error(`RPC ${res.status}`);
   const { result, error } = (await res.json()) as any;
   const info = result?.value?.data?.parsed?.info;
-  if (error || !info) throw new Error(`mint illisible : ${error?.message ?? mint}`);
+  if (!error && !result?.value && attempt < 3) {
+    await new Promise((r) => setTimeout(r, 1_500));
+    return fetchMint(mint, attempt + 1);
+  }
+  if (error || !info) throw new Error(`mint illisible : ${error?.message ?? "compte introuvable"}`);
   return { program: result.value.owner, mintAuthority: info.mintAuthority, freezeAuthority: info.freezeAuthority, extensions: info.extensions ?? [] };
 }
 
