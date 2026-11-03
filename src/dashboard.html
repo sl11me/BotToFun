@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brigitte live</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149; --yellow:#d29922; --blue:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); }
+  h1 { font-size:16px; margin:0; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+  .badge { padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; background:var(--line); }
+  .dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
+  main { display:grid; gap:12px; padding:12px 16px; grid-template-columns:repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-width:0; }
+  .wide { grid-column:1 / -1; }
+  .kpis { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+  .kpi b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
+  .kpi span { color:var(--muted); font-size:11px; }
+  .scroll { max-height:340px; overflow:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { text-align:left; padding:3px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; position:sticky; top:0; background:var(--panel); }
+  td.r, th.r { text-align:right; }
+  a { color:var(--blue); text-decoration:none; }
+  .pos { color:var(--green); } .neg { color:var(--red); } .warn { color:var(--yellow); } .muted { color:var(--muted); }
+  .bar { display:grid; grid-template-columns:minmax(0, 1fr) 2fr 44px; gap:8px; align-items:center; margin:3px 0; }
+  .bar div { height:10px; border-radius:3px; background:var(--blue); }
+  .bar .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  pre { margin:0; white-space:pre-wrap; word-break:break-word; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tabs button { background:none; border:1px solid var(--line); color:var(--muted); padding:4px 10px; border-radius:6px; cursor:pointer; margin-right:6px; }
+  .tabs button.on { color:var(--text); border-color:var(--blue); }
+  .md h3 { font-size:14px; margin:14px 0 4px; color:var(--blue); }
+  svg { width:100%; height:70px; display:block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Brigitte</h1>
+  <span id="mode" class="badge">…</span>
+  <span id="feed"><span class="dot"></span>…</span>
+  <span id="uptime" class="muted"></span>
+  <span id="rules" class="muted"></span>
+</header>
+<main>
+  <section class="wide">
+    <div class="kpis" id="kpis"></div>
+  </section>
+  <section class="wide">
+    <h2>Tokens pump.fun vus par minute (60 dernières minutes)</h2>
+    <svg id="spark" viewBox="0 0 600 70" preserveAspectRatio="none" role="img" aria-label="Débit de tokens par minute"></svg>
+  </section>
+  <section>
+    <h2>Positions ouvertes</h2>
+    <div class="scroll" id="open"></div>
+  </section>
+  <section>
+    <h2>Entonnoir de décision (dernière heure)</h2>
+    <div id="funnel"></div>
+  </section>
+  <section>
+    <h2>Flux live des nouveaux tokens</h2>
+    <div class="scroll" id="tokens"></div>
+  </section>
+  <section>
+    <h2>Trades fermés</h2>
+    <div class="scroll" id="closed"></div>
+  </section>
+  <section class="wide">
+    <h2>Logs du bot</h2>
+    <div class="scroll"><pre id="logs"></pre></div>
+  </section>
+  <section class="wide">
+    <h2>Analyses des agents</h2>
+    <div class="tabs"><button data-r="supervision" class="on">Superviseur (horaire)</button><button data-r="apprentissage">Apprentissage (6 h)</button></div>
+    <div class="scroll md" id="report" style="max-height:520px; margin-top:10px"></div>
+  </section>
+</main>
+<script>
+// Les noms et symboles de tokens viennent de n'importe qui : tout texte passe par esc().
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 4) => (n == null ? "—" : Number(n).toFixed(d));
+const signed = (n, d = 4, suffix = "") => n == null ? "—" : `<span class="${n >= 0 ? "pos" : "neg"}">${n >= 0 ? "+" : ""}${Number(n).toFixed(d)}${suffix}</span>`;
+const time = (ms) => new Date(ms).toLocaleTimeString("fr-FR");
+const ago = (s) => (s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
+const coin = (mint, label) => `<a href="https://pump.fun/coin/${encodeURIComponent(mint)}" target="_blank" rel="noopener noreferrer">${esc(label || mint.slice(0, 6))}</a>`;
+const table = (head, rows) => rows.length ? `<table><tr>${head.map((h) => `<th class="${h.endsWith(" ") ? "r" : ""}">${h.trim()}</th>`).join("")}</tr>${rows.join("")}</table>` : `<p class="muted">Rien pour l'instant.</p>`;
+const decisionClass = (d) => d === "achat" ? "pos" : d === "en évaluation" ? "warn" : d.startsWith("erreur") ? "neg" : "muted";
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("api/state")).json(); } catch { $("feed").innerHTML = `<span class="dot" style="background:var(--red)"></span>bot injoignable`; return; }
+  const r = s.rules;
+  $("mode").textContent = s.mode.toUpperCase();
+  $("mode").style.background = s.mode === "live" ? "var(--red)" : "var(--line)";
+  $("uptime").textContent = `en ligne depuis ${ago((s.now - s.startedAt) / 1000)}`;
+  $("rules").textContent = `TP ${r.takeProfitPct}% · SL ${r.stopLossPct}% · trailing ${r.trailPct}% après +${r.trailArmPct}% · max ${r.maxHoldSeconds}s · dev buy ${r.minDevBuySol}–${r.maxDevBuySol} SOL · délai ${r.entryDelaySeconds}s · inflow ≥ ${r.minInflowSol} SOL`;
+
+  const silent = s.tokens.length ? (s.now - s.tokens[0].created_at) / 1000 : Infinity;
+  const color = silent < 60 ? "var(--green)" : silent < 300 ? "var(--yellow)" : "var(--red)";
+  $("feed").innerHTML = `<span class="dot" style="background:${color}"></span>flux PumpPortal : dernier token il y a ${silent === Infinity ? "—" : ago(silent)}`;
+
+  const nowMin = Math.floor(s.now / 60000);
+  const counts = Array.from({ length: 60 }, (_, i) => s.perMinute.find((p) => p.m === nowMin - 59 + i)?.n ?? 0);
+  const seenHour = counts.reduce((a, b) => a + b, 0);
+  const last10 = counts.slice(-11, -1).reduce((a, b) => a + b, 0) / 10; // minutes complètes seulement
+  const trades = s.totals.trades, wins = s.totals.wins ?? 0;
+  const unrealized = s.open.reduce((a, p) => a + (p.value == null ? 0 : p.value - p.cost), 0);
+  const kpi = (label, value) => `<div class="kpi"><b>${value}</b><span>${label}</span></div>`;
+  $("kpis").innerHTML = [
+    kpi("PnL réalisé (SOL)", signed(s.realizedPnl)),
+    kpi("PnL latent (SOL)", s.open.length ? signed(unrealized) : "—"),
+    kpi("Trades gagnants", trades ? `${wins}/${trades} <small class="muted">${Math.round((wins / trades) * 100)}%</small>` : "0"),
+    kpi("Positions ouvertes", `${s.open.length}/${r.maxOpenPositions}`),
+    kpi("Tokens / min (10 min)", last10.toFixed(1)),
+    kpi("Tokens vus (1 h)", seenHour),
+    kpi("Achats (1 h)", s.funnel["achat"] ?? 0),
+  ].join("");
+
+  const max = Math.max(1, ...counts);
+  $("spark").innerHTML = counts.map((n, i) => `<rect x="${i * 10 + 1}" y="${70 - (n / max) * 66}" width="8" height="${(n / max) * 66}" fill="var(--blue)" rx="1"><title>${n} tokens</title></rect>`).join("");
+
+  $("open").innerHTML = table(["Token", "Coût ", "Valeur ", "PnL ", "Plus haut ", "Tenu "], s.open.map((p) => {
+    const pnl = p.value == null ? null : ((p.value - p.cost) / p.cost) * 100;
+    return `<tr><td>${coin(p.mint, p.symbol)}</td><td class="r">${fmt(p.cost)}</td><td class="r">${fmt(p.value)}</td><td class="r">${signed(pnl, 1, "%")}</td><td class="r">${signed(((p.peak - p.cost) / p.cost) * 100, 1, "%")}</td><td class="r">${ago((s.now - p.openedAt) / 1000)}</td></tr>`;
+  }));
+
+  const funnel = Object.entries(s.funnel).sort((a, b) => b[1] - a[1]);
+  const fmax = Math.max(1, ...funnel.map((f) => f[1]));
+  $("funnel").innerHTML = funnel.length ? funnel.map(([k, n]) => `<div class="bar"><span class="label ${decisionClass(k)}" title="${esc(k)}">${esc(k)}</span><div style="width:${(n / fmax) * 100}%${k === "achat" ? ";background:var(--green)" : ""}"></div><span class="muted">${n}</span></div>`).join("") : `<p class="muted">Aucun token depuis une heure.</p>`;
+
+  $("tokens").innerHTML = table(["Heure", "Token", "Dev buy ", "Mcap ", "Décision"], s.tokens.map((t) =>
+    `<tr><td class="muted">${time(t.created_at)}</td><td>${coin(t.mint, t.symbol)}</td><td class="r">${fmt(t.dev_buy_sol, 2)}</td><td class="r">${fmt(t.mcap_sol, 1)}</td><td class="${decisionClass(t.decision ?? "")}">${esc(t.decision)}</td></tr>`));
+
+  $("closed").innerHTML = table(["Fermé", "Token", "PnL ", "PnL % ", "Durée ", "Sortie"], s.closed.map((c) =>
+    `<tr><td class="muted">${time(c.closed_at)}</td><td>${coin(c.mint, c.symbol)}</td><td class="r">${signed(c.proceeds - c.cost)}</td><td class="r">${signed(((c.proceeds - c.cost) / c.cost) * 100, 1, "%")}</td><td class="r">${ago((c.closed_at - c.opened_at) / 1000)}</td><td>${esc(c.exit_reason)}</td></tr>`));
+
+  const box = $("logs").parentElement, atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
+  $("logs").innerHTML = s.logs.map((l) => `<span class="${/\[err\]|Error|erreur/i.test(l) ? "neg" : /\[buy\]/.test(l) ? "pos" : /\[sell\]/.test(l) ? "warn" : ""}">${esc(l)}</span>`).join("\n");
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+// Markdown minimal des rapports : titres, gras, code ; le reste en texte brut échappé.
+const md = (text) => text ? esc(text).split("\n").map((l) => /^#{1,3} /.test(l) ? `<h3>${l.replace(/^#+ /, "")}</h3>` : l)
+  .join("\n").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>") : "";
+let reports = {}, tab = "supervision";
+async function refreshReports() {
+  try { reports = await (await fetch("api/reports")).json(); } catch { return; }
+  $("report").innerHTML = `<pre>${md(reports[tab]) || '<span class="muted">Pas encore de rapport.</span>'}</pre>`;
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  tab = b.dataset.r;
+  refreshReports();
+});
+
+refresh(); refreshReports();
+setInterval(refresh, 2000);
+setInterval(refreshReports, 30000);
+</script>
+</body>
+</html>

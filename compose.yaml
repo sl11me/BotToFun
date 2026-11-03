@@ -11,6 +11,12 @@ services:
     # Montage hôte (et non volume nommé) : les agents lancés sur l'hôte lisent bottofun.db directement.
     volumes:
       - ./data:/app/data
+      # Rapports des agents, affichés en lecture seule par le dashboard.
+      - ./reports:/app/reports:ro
+      - ./docs:/app/docs:ro
+    # Lié à 127.0.0.1 seulement : sur un VPS, y accéder par `ssh -L 8080:localhost:8080`.
+    ports:
+      - "127.0.0.1:8080:8080"
     logging:
       driver: json-file
       options:

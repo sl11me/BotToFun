@@ -2,7 +2,8 @@
 FROM node:24-slim
 
 WORKDIR /app
-ENV NODE_ENV=production DB_PATH=/app/data/bottofun.db
+ENV NODE_ENV=production DB_PATH=/app/data/bottofun.db DASHBOARD_HOST=0.0.0.0
+EXPOSE 8080
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

@@ -31,4 +31,15 @@ export const config = {
   entryDelaySeconds: num("ENTRY_DELAY_SECONDS", 60),
   minInflowSol: num("MIN_INFLOW_SOL", 3),
   dbPath: process.env.DB_PATH ?? "bottofun.db",
+  // Sécurité (voir rugReason / mintReason dans strategy.ts)
+  maxRugScore: num("MAX_RUG_SCORE", 20),
+  maxTop10Pct: num("MAX_TOP10_PCT", 30),
+  maxHolderPct: num("MAX_HOLDER_PCT", 10),
+  maxInsiderPct: num("MAX_INSIDER_PCT", 10),
+  maxCreatorLaunches24h: num("MAX_CREATOR_LAUNCHES_24H", 3),
+  minLiquiditySol: num("MIN_LIQUIDITY_SOL", 4),
+  maxRoundTripLossPct: num("MAX_ROUNDTRIP_LOSS_PCT", 6),
+  rugLossPct: num("RUG_LOSS_PCT", 50), // perte qui met le créateur sur liste noire
+  dashboardPort: num("DASHBOARD_PORT", 8080), // 0 = désactivé
+  dashboardHost: process.env.DASHBOARD_HOST || "127.0.0.1",
 };

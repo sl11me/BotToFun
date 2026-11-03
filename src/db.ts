@@ -96,3 +96,31 @@ export function realizedPnlSol(): number {
     .get(config.mode) as { pnl: number | null };
   return (r.pnl ?? 0) / 1e9;
 }
+
+/** Lectures du tableau de bord : derniers tokens, décisions et débit depuis `since` (ms), trades fermés. */
+export function dashboardData(since: number) {
+  return {
+    tokens: db.prepare("SELECT mint, symbol, created_at, dev_buy_sol, mcap_sol, decision FROM tokens ORDER BY created_at DESC LIMIT 60").all(),
+    decisions: db.prepare("SELECT decision, COUNT(*) AS n FROM tokens WHERE created_at >= ? GROUP BY 1").all(since) as { decision: string; n: number }[],
+    perMinute: db.prepare("SELECT created_at / 60000 AS m, COUNT(*) AS n FROM tokens WHERE created_at >= ? GROUP BY 1").all(since),
+    closed: db
+      .prepare("SELECT mint, symbol, cost_lamports, proceeds_lamports, opened_at, closed_at, exit_reason FROM positions WHERE closed_at IS NOT NULL AND mode = ? ORDER BY closed_at DESC LIMIT 30")
+      .all(config.mode),
+    totals: db
+      .prepare("SELECT COUNT(*) AS trades, SUM(CAST(proceeds_lamports AS INTEGER) > CAST(cost_lamports AS INTEGER)) AS wins FROM positions WHERE closed_at IS NOT NULL AND mode = ?")
+      .get(config.mode),
+  };
+}
+
+/** Créateur dont un token nous a déjà fait perdre au moins `lossPct` % : liste noire, on ne lui fait plus confiance. */
+export function isBlacklisted(creator: string, lossPct: number): boolean {
+  return (
+    db
+      .prepare(
+        `SELECT 1 FROM positions p JOIN tokens t ON t.mint = p.mint
+         WHERE t.creator = ? AND p.closed_at IS NOT NULL
+           AND CAST(p.proceeds_lamports AS INTEGER) <= CAST(p.cost_lamports AS INTEGER) * (100 - ?) / 100`,
+      )
+      .get(creator, lossPct) !== undefined
+  );
+}
