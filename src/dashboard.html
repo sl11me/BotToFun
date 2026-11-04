@@ -73,7 +73,10 @@
   .reason .track { position:relative; height:26px; border-radius:7px; background:rgba(255,255,255,.03); overflow:hidden; }
   .reason .track i { position:absolute; inset:0 auto 0 0; border-radius:7px; opacity:.28; }
   .reason .track span { position:relative; display:block; padding:3px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .reason .n { text-align:right; color:var(--muted); }
+  .reason .n { text-align:right; color:var(--muted); align-self:start; padding-top:3px; }
+  .reason .track span { font-weight:600; }
+  .reason .why { color:var(--muted); font-size:12px; line-height:1.45; margin:4px 2px 6px; }
+  .reasons { max-height:520px; }
 
   /* Plateformes */
   .platforms { display:grid; gap:10px; }
@@ -229,7 +232,49 @@ const CATS = {
 };
 const SECURITY = /authority|extension|programme de token|rugcheck|holder|insider|créateur|liste noire|aller-retour|simulation|honeypot|mayhem/i;
 const category = (d = "") => d === "achat" ? "buy" : d === "en évaluation" ? "pending" : /^erreur|trop d'évaluations/.test(d) ? "error" : SECURITY.test(d) ? "security" : "market";
-const tag = (d) => { const c = CATS[category(d)].color; return `<span class="tag" title="${esc(d)}" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)">${esc(d)}</span>`; };
+// Motifs techniques du bot traduits en langage clair. Le premier motif qui correspond l'emporte : l'ordre compte.
+const EXPLAIN = [
+  [/^achat/, "Acheté", () => "Le token a passé tous les contrôles : Brigitte a pris une position."],
+  [/^en évaluation/, "En cours d'analyse", (r) => `Brigitte attend ${r.entryDelaySeconds} s pour observer les premiers acheteurs, puis lance les contrôles de sécurité.`],
+  [/^dev buy.*</, "Créateur trop peu investi", (r) => `Le créateur a acheté moins de ${r.minDevBuySol} SOL de son propre token au lancement : il n'y croit pas lui-même, c'est souvent un lancement jetable.`],
+  [/^dev buy.*>/, "Créateur trop gros acheteur", (r) => `Le créateur a acheté plus de ${r.maxDevBuySol} SOL dès le départ : il détient une grosse part et peut tout revendre d'un coup sur les acheteurs (dump).`],
+  [/^mayhem/, "Mode Mayhem de pump.fun", () => "Token lancé en mode Mayhem : une IA de pump.fun y passe des ordres au hasard. Volumes et prix ne reflètent pas un vrai intérêt, les signaux sont faussés."],
+  [/^pas de telegram/, "Pas de communauté Telegram", () => "Aucun lien Telegram dans la fiche du token. Les tokens qui en ont un atteignent environ 9 fois plus souvent la migration vers un vrai marché."],
+  [/^pas de métadonnées/, "Pas de fiche token", () => "Le token n'a pas de fiche (nom, image, réseaux). Aucun projet sérieux ne se lance ainsi."],
+  [/^nom\/symbole vide/, "Nom ou symbole vide", () => "Le token n'a pas de nom ou de symbole : lancement bâclé ou automatisé."],
+  [/^pool/, "Autre plateforme", () => "Annoncé par le flux pump.fun mais lancé sur une autre plateforme non prise en charge par ce parcours."],
+  [/^mcap.*après délai/, "Déjà trop cher après l'attente", (r) => `Pendant le délai d'observation, la capitalisation a dépassé ${r.maxMcapSol} SOL : on arriverait après la hausse.`],
+  [/^mcap/, "Déjà trop cher", (r) => `La capitalisation dépasse déjà ${r.maxMcapSol} SOL à l'annonce : le gros de la hausse est passé.`],
+  [/^liquidité/, "Liquidité trop faible", (r) => `Moins de ${r.minLiquiditySol} SOL de liquidité : notre propre vente ferait chuter le prix, impossible de sortir proprement.`],
+  [/^inflow/, "Pas assez d'acheteurs", (r) => `Moins de ${r.minInflowSol} SOL d'achats nets pendant le délai d'observation : le token n'attire personne.`],
+  [/^mint authority/, "Le créateur peut créer des tokens", () => "« Mint authority » active : le créateur peut fabriquer de nouveaux tokens à volonté et diluer la valeur des nôtres."],
+  [/^freeze authority/, "Le créateur peut geler nos tokens", () => "« Freeze authority » active : le créateur peut bloquer notre wallet et nous empêcher de vendre (piège type honeypot)."],
+  [/transferFeeConfig/, "Taxe cachée sur chaque transfert", () => "Extension Token-2022 « transferFeeConfig » : le créateur prélève un pourcentage à chaque achat ou vente, et peut le monter jusqu'à rendre la revente inutile."],
+  [/^extension token-2022/, "Extension Token-2022 dangereuse", () => "Le token utilise une extension (hook de transfert, délégué permanent, pause…) qui permet au créateur de bloquer, taxer ou reprendre nos tokens."],
+  [/^programme de token inconnu/, "Programme de token inconnu", () => "Le token n'utilise pas le programme standard de Solana : comportement imprévisible."],
+  [/^rugcheck score/, "Score RugCheck trop risqué", (r) => `RugCheck.xyz note le token au-dessus de ${r.maxRugScore} (1 = sain, 100 = très risqué).`],
+  [/^rugcheck/, "Alerte RugCheck", () => "RugCheck.xyz signale un risque de niveau « danger » (le détail est dans le motif technique)."],
+  [/^plus gros holder/, "Un wallet détient trop", (r) => `Un seul wallet (hors pool) détient plus de ${r.maxHolderPct} % des tokens : s'il vend, le prix s'effondre.`],
+  [/^top10/, "Tokens trop concentrés", (r) => `Les 10 plus gros wallets détiennent plus de ${r.maxTop10Pct} % des tokens : quelques ventes suffisent à faire chuter le prix.`],
+  [/^insiders/, "Trop d'initiés", (r) => `Des wallets liés au créateur détiennent plus de ${r.maxInsiderPct} % des tokens.`],
+  [/^créateur sur liste noire/, "Créateur déjà piégeur", (r) => `Un token précédent de ce créateur nous a fait perdre plus de ${r.rugLossPct} %.`],
+  [/^créateur/, "Créateur en série", (r) => `Le créateur a lancé plus de ${r.maxCreatorLaunches24h} tokens en 24 h : profil typique des arnaques à la chaîne.`],
+  [/^aller-retour/, "Achat-revente trop perdant", (r) => `Simulation d'un achat suivi d'une revente immédiate : on perdrait plus de ${r.maxRoundTripLossPct} % (taxes, frais ou liquidité trop faible).`],
+  [/^simulation impossible/, "Invendable selon Jupiter", () => "Jupiter ne trouve aucun chemin pour acheter puis revendre ce token : on ne pourrait pas en sortir."],
+  [/^capacité max/, "Toutes les places sont prises", (r) => `Brigitte a déjà ${r.maxOpenPositions} positions ouvertes, le maximum autorisé.`],
+  [/^trop d'évaluations/, "Brigitte débordée", (r) => `Déjà ${r.maxEvaluations} tokens en cours d'analyse : celui-ci a été ignoré pour ne pas surcharger les API.`],
+  [/^déjà migré/, "Déjà migré", () => "Le token a déjà quitté sa phase de lancement pour un marché classique : on arrive trop tard."],
+  [/^erreur : métadonnées/, "Fiche token illisible", () => "Impossible de télécharger la fiche du token (serveurs IPFS). Par sécurité, pas d'achat sans vérification."],
+  [/^erreur/, "Erreur technique", () => "Un contrôle a échoué (réseau, API indisponible). Par sécurité, Brigitte n'achète jamais sans avoir pu tout vérifier."],
+];
+const explain = (d, r) => {
+  const e = EXPLAIN.find(([re]) => re.test(d));
+  return e ? { title: e[1], why: e[2](r) } : { title: d, why: "" };
+};
+const tag = (d) => {
+  const c = CATS[category(d)].color, e = explain(d, last.rules);
+  return `<span class="tag" title="${esc(`${e.why}\n\nMotif technique : ${d}`)}" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)">${esc(e.title)}</span>`;
+};
 
 let filter = "all";
 let last;
@@ -294,7 +339,10 @@ function render(s) {
   $("funnel").innerHTML = total ? `
     <div class="stack">${Object.keys(CATS).filter((c) => byCat[c]).map((c) => `<i title="${CATS[c].label} : ${byCat[c]}" style="width:${(byCat[c] / total) * 100}%;background:${CATS[c].color}"></i>`).join("")}</div>
     <div class="legend">${Object.keys(CATS).filter((c) => byCat[c]).map((c) => `<span><span class="sw" style="background:${CATS[c].color}"></span>${CATS[c].label} <b class="num">${byCat[c]}</b></span>`).join("")}</div>
-    <div class="reasons">${funnel.map(([k, n]) => `<div class="reason"><div class="track"><i style="width:${(n / fmax) * 100}%;background:${CATS[category(k)].color}"></i><span title="${esc(k)}">${esc(k)}</span></div><span class="n num">${n}</span></div>`).join("")}</div>`
+    <div class="reasons">${funnel.map(([k, n]) => {
+      const e = explain(k, r);
+      return `<div class="reason"><div><div class="track"><i style="width:${(n / fmax) * 100}%;background:${CATS[category(k)].color}"></i><span title="Motif technique : ${esc(k)}">${esc(e.title)}</span></div>${e.why ? `<div class="why">${esc(e.why)}</div>` : ""}</div><span class="n num">${n}</span></div>`;
+    }).join("")}</div>`
     : `<div class="empty">Aucun token depuis une heure.</div>`;
 
   // Positions ouvertes
