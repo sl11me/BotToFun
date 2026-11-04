@@ -45,7 +45,8 @@ const chart = (mint: string) => `<a href="https://dexscreener.com/solana/${mint}
  */
 async function evaluate(t: NewToken): Promise<string> {
   if (isBlacklisted(t.traderPublicKey, config.rugLossPct)) return "créateur sur liste noire";
-  const [meta, mint] = await Promise.all([fetchMetadata(t.uri!), fetchMint(t.mint)]);
+  // Sans filtre Telegram, inutile de lire les métadonnées IPFS (4,5 % d'erreurs de passerelle).
+  const [meta, mint] = await Promise.all([config.requireTelegram ? fetchMetadata(t.uri!) : {}, fetchMint(t.mint)]);
   const early = mintReason(mint) ?? socialReason(meta, config.requireTelegram);
   if (early) return early;
 
@@ -72,7 +73,7 @@ async function evaluateLaunch(l: Launch): Promise<string> {
   const solUsd = info.find((i) => i.id === SOL_MINT)?.usdPrice;
   if (!token || !solUsd) throw new Error("données Jupiter absentes");
   // Jupiter ne connaît pas encore les réseaux sociaux d'un token neuf : on lit ses métadonnées (URI fournie par RugCheck).
-  const meta: Record<string, any> = rug.tokenMeta?.uri ? await fetchMetadata(rug.tokenMeta.uri) : {};
+  const meta: Record<string, any> = config.requireTelegram && rug.tokenMeta?.uri ? await fetchMetadata(rug.tokenMeta.uri) : {};
   const telegram = meta.telegram ?? meta.extensions?.telegram ?? token.telegram;
   const reason =
     socialReason({ telegram }, config.requireTelegram) ?? marketReason(token, solUsd, config) ?? rugReason(rug, isPool, Date.now(), config);
