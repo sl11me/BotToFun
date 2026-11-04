@@ -5,6 +5,7 @@ import { fetchCurve, fetchMetadata, fetchMint, fetchRugReport } from "./chain.ts
 import { config } from "./config.ts";
 import { closePosition, isBlacklisted, isKnown, logToken, openPosition, openPositions, realizedPnlSol, updatePeak, type Position } from "./db.ts";
 import { onNewLaunch, onNewToken } from "./feed.ts";
+import { h, isMint, notify, startTelegram } from "./telegram.ts";
 import { quote, SOL_MINT, swap, tokenInfo } from "./jupiter.ts";
 import {
   buyQuote,
@@ -35,6 +36,8 @@ const values = new Map<string, bigint>(); // dernière valeur de revente de chaq
 // shortcut: un multisig (PDA) qui accumule passerait inaperçu ; à affiner si RugCheck le signale.
 const isPool = (owner: string) => isOffCurveAddress(owner as Address);
 const wait = (s: number) => new Promise((r) => setTimeout(r, s * 1000));
+let paused = false; // /pause sur Telegram : plus d'achat automatique, les ventes continuent
+const chart = (mint: string) => `<a href="https://dexscreener.com/solana/${mint}">graphique</a>`;
 
 /**
  * Filtres lents puis achat. Renvoie la décision pour la table tokens.
@@ -77,7 +80,8 @@ async function evaluateLaunch(l: Launch): Promise<string> {
 }
 
 /** Simulation achat + revente, puis achat (live) ou position simulée (paper). `curve` : prix local pump.fun. */
-async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve: string, curve?: Curve): Promise<string> {
+async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve: string, curve?: Curve, manual = false): Promise<string> {
+  if (paused && !manual) return "en pause";
   // Place réservée dès maintenant : deux évaluations qui finissent ensemble ne doivent pas dépasser la limite.
   if (openPositions().length + buying >= config.maxOpenPositions) return "capacité max";
   buying++;
@@ -100,13 +104,17 @@ async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve:
     const cost = spend + txCost + lamports(config.ataRentSol);
     openPosition({ mint: t.mint, symbol: t.symbol, bondingCurve, costLamports: cost, tokenAmount, openedAt: Date.now() });
     console.log(`[buy] ${t.symbol} ${t.mint} : ${config.buySol} SOL -> ${tokenAmount} tokens${curve ? ` (mcap ${mcapSol(curve)} SOL)` : ""}`);
+    notify({
+      text: `🟢 <b>Achat ${h(t.symbol)}</b>${manual ? " (manuel)" : ""} · ${config.buySol} SOL${curve ? ` · mcap ${mcapSol(curve).toFixed(1)} SOL` : ""}\n<code>${t.mint}</code> · ${chart(t.mint)}`,
+      buttons: [[{ text: `Vendre ${t.symbol}`, data: `vendre ${t.mint}` }]],
+    });
     return "achat";
   } finally {
     buying--;
   }
 }
 
-async function check(p: Position) {
+async function check(p: Position, forced?: string) {
   const curve = p.bondingCurve ? await fetchCurve(p.bondingCurve) : null;
   // Hors curve pump.fun active (autre plateforme, ou token migré) : prix de revente demandé à Jupiter.
   const value = (curve && !curve.complete ? sellQuote(curve, p.tokenAmount) : await quote(p.mint, SOL_MINT, p.tokenAmount)) - txCost;
@@ -114,12 +122,14 @@ async function check(p: Position) {
   if (peak !== p.peakLamports) updatePeak(p.mint, peak);
   values.set(p.mint, value);
 
-  const reason = exitReason(p.costLamports, value, peak, (Date.now() - p.openedAt) / 1000, config);
+  const reason = forced ?? exitReason(p.costLamports, value, peak, (Date.now() - p.openedAt) / 1000, config);
   if (!reason) return;
   const proceeds = live ? (await swap(p.mint, SOL_MINT, p.tokenAmount)).outAmount - txCost : value;
   closePosition(p.mint, proceeds, reason);
   values.delete(p.mint);
   console.log(`[sell] ${p.symbol} ${reason} -> ${Number(proceeds) / 1e9} SOL | PnL réalisé : ${realizedPnlSol().toFixed(4)} SOL`);
+  const pnl = Number(proceeds - p.costLamports) / 1e9;
+  notify(`${pnl >= 0 ? "✅" : "🔻"} <b>Vente ${h(p.symbol)}</b> · ${h(reason)}\nPnL ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} SOL (${((pnl / (Number(p.costLamports) / 1e9)) * 100).toFixed(1)} %) · total ${realizedPnlSol().toFixed(4)} SOL`);
 }
 
 // Le verrou `busy` est toujours relâché ; une erreur est loguée sans tuer le bot.
@@ -161,9 +171,90 @@ onNewToken((t) => {
 
 onNewLaunch((l) => consider(l, () => evaluateLaunch(l)));
 
+/** Achat depuis Telegram : contrôles de sécurité complets, sans les filtres de stratégie (délai, Telegram, mcap). */
+async function manualBuy(mint: string): Promise<string> {
+  if (!isMint(mint)) return "Adresse invalide : colle le mint du token après /acheter.";
+  if (openPositions().some((p) => p.mint === mint)) return "Déjà en position sur ce token.";
+  if (busy.has(mint)) return "Ce token est déjà en cours d'analyse.";
+  busy.add(mint);
+  try {
+    const [info, mintInfo, rug] = await Promise.all([tokenInfo([mint]), fetchMint(mint), fetchRugReport(mint)]);
+    const token = info.find((i) => i.id === mint);
+    const l = { mint, name: token?.name ?? "", symbol: token?.symbol ?? mint.slice(0, 6), traderPublicKey: token?.dev ?? "", platform: token?.launchpad ?? undefined };
+    const decision =
+      (l.traderPublicKey && isBlacklisted(l.traderPublicKey, config.rugLossPct) ? "créateur sur liste noire" : null) ??
+      mintReason(mintInfo) ??
+      rugReason(rug, isPool, Date.now(), config) ??
+      (await simulateAndBuy(l, "", undefined, true));
+    logToken(l, `${decision} (manuel)`);
+    return decision === "achat" ? `Achat de ${h(l.symbol)} lancé.` : `Pas d'achat de ${h(l.symbol)} : ${h(decision)}`;
+  } finally {
+    busy.delete(mint);
+  }
+}
+
+/** Vente immédiate d'une position, par mint ou symbole. */
+async function forceSell(query: string): Promise<string> {
+  const q = query.toLowerCase();
+  const p = openPositions().find((x) => x.mint === query || x.symbol.toLowerCase() === q);
+  if (!p) return query ? `Aucune position ouverte sur ${h(query)}.` : "Précise le token : /vendre SYMBOLE";
+  if (busy.has(p.mint)) return `${h(p.symbol)} est déjà en cours de vente ou d'évaluation, réessaie dans quelques secondes.`;
+  await guarded(p.mint, () => check(p, "vente manuelle"));
+  return openPositions().some((x) => x.mint === p.mint) ? `Échec de la vente de ${h(p.symbol)}, voir les logs.` : `${h(p.symbol)} vendu.`;
+}
+
+function status(): string {
+  const open = openPositions();
+  const lines = open.map((p) => {
+    const v = values.get(p.mint);
+    const pct = v === undefined ? "…" : `${((Number(v - p.costLamports) / Number(p.costLamports)) * 100).toFixed(1)} %`;
+    return `• <b>${h(p.symbol)}</b> ${pct} · ${Math.round((Date.now() - p.openedAt) / 1000)} s`;
+  });
+  return [
+    `<b>Brigitte</b> · ${config.mode.toUpperCase()} · achats ${paused ? "⏸ en pause" : "▶️ actifs"}`,
+    `PnL réalisé : ${realizedPnlSol().toFixed(4)} SOL`,
+    `Positions : ${open.length}/${config.maxOpenPositions}`,
+    ...lines,
+  ].join("\n");
+}
+
+const help = [
+  "<b>Commandes</b>",
+  "/statut : mode, PnL, positions",
+  "/positions : positions avec bouton de vente",
+  "/acheter MINT : achat après les contrôles de sécurité",
+  "/vendre SYMBOLE : vente immédiate",
+  "/pause, /reprendre : achats automatiques",
+].join("\n");
+
+void startTelegram(
+  {
+    start: async () => help,
+    aide: async () => help,
+    statut: async () => status(),
+    positions: async () => {
+      const open = openPositions();
+      return open.length ? { text: status(), buttons: open.map((p) => [{ text: `Vendre ${p.symbol}`, data: `vendre ${p.mint}` }]) } : "Aucune position ouverte.";
+    },
+    acheter: (arg) => manualBuy(arg),
+    vendre: (arg) => forceSell(arg),
+    pause: async () => ((paused = true), "⏸ Achats automatiques en pause. Les positions ouvertes restent surveillées."),
+    reprendre: async () => ((paused = false), "▶️ Achats automatiques relancés."),
+  },
+  [
+    ["statut", "Mode, PnL et positions"],
+    ["positions", "Positions ouvertes et vente"],
+    ["acheter", "Acheter un token (mint)"],
+    ["vendre", "Vendre une position"],
+    ["pause", "Suspendre les achats auto"],
+    ["reprendre", "Relancer les achats auto"],
+  ],
+);
+
 setInterval(() => {
   for (const p of openPositions()) void guarded(p.mint, () => check(p));
 }, config.pollSeconds * 1000);
 
 startDashboard((mint) => values.get(mint));
 console.log(`Brigitte démarrée en mode ${config.mode.toUpperCase()} | ${config.buySol} SOL/position, max ${config.maxOpenPositions}`);
+notify(`🚀 Brigitte démarrée en mode <b>${config.mode.toUpperCase()}</b> · ${config.buySol} SOL/position, max ${config.maxOpenPositions}`);

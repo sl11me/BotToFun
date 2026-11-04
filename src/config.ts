@@ -46,4 +46,7 @@ export const config = {
   launchPollSeconds: num("LAUNCH_POLL_SECONDS", 10),
   dashboardPort: num("DASHBOARD_PORT", 8080), // 0 = désactivé
   dashboardHost: process.env.DASHBOARD_HOST || "127.0.0.1",
+  // Bot Telegram (créé avec @BotFather) : notifications et commandes depuis le mobile. Vide = désactivé.
+  telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  telegramChatId: process.env.TELEGRAM_CHAT_ID ?? "", // seul chat autorisé à piloter Brigitte
 };

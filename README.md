@@ -30,6 +30,23 @@ Le bot sert une page temps réel sur http://localhost:8080 (`DASHBOARD_PORT`, 0 
 
 Sur un VPS, rien n'est exposé sur internet : `ssh -L 8080:localhost:8080 <vps>` puis ouvrir http://localhost:8080.
 
+## Telegram
+
+Brigitte envoie chaque achat et chaque vente sur Telegram et se pilote depuis le mobile.
+
+1. Crée un bot avec [@BotFather](https://t.me/BotFather) (`/newbot`) et mets son token dans `TELEGRAM_BOT_TOKEN`.
+2. Démarre Brigitte et envoie `/start` au bot : il répond ton chat id. Mets-le dans `TELEGRAM_CHAT_ID` et redémarre.
+
+| Commande | Effet |
+|---|---|
+| `/statut` | Mode, PnL réalisé, positions avec PnL latent |
+| `/positions` | Positions ouvertes, un bouton « Vendre » par position |
+| `/acheter MINT` | Achat manuel : contrôles de sécurité (autorités, extensions, RugCheck, holders, liste noire, simulation achat-revente), sans les filtres de stratégie |
+| `/vendre SYMBOLE` | Vente immédiate (symbole ou mint) |
+| `/pause`, `/reprendre` | Coupe ou relance les achats automatiques ; les ventes continuent |
+
+Seul `TELEGRAM_CHAT_ID` est obéi, les autres chats sont ignorés. En `live`, le compte Telegram donne le contrôle des achats : active la vérification en deux étapes.
+
 ## Docker / VPS
 
 Un seul conteneur, jamais plus : PumpPortal bannit l'IP au-delà d'une connexion WebSocket, et deux instances achèteraient deux fois le même token.
