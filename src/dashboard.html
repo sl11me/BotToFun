@@ -5,83 +5,194 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Brigitte live</title>
 <style>
-  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149; --yellow:#d29922; --blue:#58a6ff; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); }
-  h1 { font-size:16px; margin:0; }
-  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
-  .badge { padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; background:var(--line); }
-  .dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
-  main { display:grid; gap:12px; padding:12px 16px; grid-template-columns:repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-width:0; }
-  .wide { grid-column:1 / -1; }
-  .kpis { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
-  .kpi b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
-  .kpi span { color:var(--muted); font-size:11px; }
-  .scroll { max-height:340px; overflow:auto; }
-  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-  th, td { text-align:left; padding:3px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-weight:500; position:sticky; top:0; background:var(--panel); }
-  td.r, th.r { text-align:right; }
-  a { color:var(--blue); text-decoration:none; }
-  .pos { color:var(--green); } .neg { color:var(--red); } .warn { color:var(--yellow); } .muted { color:var(--muted); }
-  .bar { display:grid; grid-template-columns:minmax(0, 1fr) 2fr 44px; gap:8px; align-items:center; margin:3px 0; }
-  .bar div { height:10px; border-radius:3px; background:var(--blue); }
-  .bar .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  pre { margin:0; white-space:pre-wrap; word-break:break-word; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .tabs button { background:none; border:1px solid var(--line); color:var(--muted); padding:4px 10px; border-radius:6px; cursor:pointer; margin-right:6px; }
-  .tabs button.on { color:var(--text); border-color:var(--blue); }
-  .md h3 { font-size:14px; margin:14px 0 4px; color:var(--blue); }
-  svg { width:100%; height:70px; display:block; }
+  :root {
+    --bg:#0a0d14; --panel:#121722; --panel2:#171d2b; --line:#232b3b; --text:#e8ecf4; --muted:#8a94a8; --dim:#5d6679;
+    --green:#22c55e; --red:#ef4444; --yellow:#eab308; --orange:#f97316; --blue:#3b82f6; --violet:#8b5cf6; --pink:#ec4899; --cyan:#06b6d4;
+    --radius:14px;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(1200px 600px at 10% -10%, #16213a 0%, var(--bg) 55%) fixed, var(--bg); color:var(--text);
+    font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color:inherit; text-decoration:none; }
+  a:hover { color:var(--blue); }
+  .num { font-variant-numeric:tabular-nums; }
+  .pos { color:var(--green); } .neg { color:var(--red); } .warn { color:var(--yellow); } .muted { color:var(--muted); } .dim { color:var(--dim); }
+
+  /* En-tête */
+  header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:12px 20px; align-items:center; justify-content:space-between;
+    padding:14px 24px; background:rgba(10,13,20,.82); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .logo { width:36px; height:36px; border-radius:10px; display:grid; place-items:center; font-weight:800; font-size:18px;
+    background:linear-gradient(135deg, var(--violet), var(--pink)); box-shadow:0 4px 18px rgba(139,92,246,.35); }
+  .brand h1 { margin:0; font-size:18px; letter-spacing:-.01em; }
+  .brand small { display:block; color:var(--muted); font-size:12px; margin-top:-2px; }
+  .status { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .pill { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; font-size:12px; font-weight:600;
+    background:var(--panel2); border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .pill.paper { color:var(--cyan); border-color:rgba(6,182,212,.4); background:rgba(6,182,212,.1); }
+  .pill.live { color:#fff; border-color:var(--red); background:var(--red); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); }
+  .dot.ok { background:var(--green); box-shadow:0 0 0 0 rgba(34,197,94,.6); animation:pulse 2s infinite; }
+  .dot.slow { background:var(--yellow); } .dot.down { background:var(--red); }
+  @keyframes pulse { 70% { box-shadow:0 0 0 7px rgba(34,197,94,0); } 100% { box-shadow:0 0 0 0 rgba(34,197,94,0); } }
+
+  main { max-width:1500px; margin:0 auto; padding:20px 24px 40px; display:grid; gap:16px; grid-template-columns:repeat(12, minmax(0, 1fr)); }
+  .card { background:linear-gradient(180deg, var(--panel2), var(--panel)); border:1px solid var(--line); border-radius:var(--radius); padding:18px; min-width:0; }
+  .card > h2 { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 14px; font-size:13px; font-weight:600; color:var(--text); }
+  .card > h2 .hint { font-weight:400; color:var(--muted); font-size:12px; }
+  .s12 { grid-column:span 12; } .s8 { grid-column:span 8; } .s7 { grid-column:span 7; } .s6 { grid-column:span 6; } .s5 { grid-column:span 5; } .s4 { grid-column:span 4; }
+  @media (max-width:1100px) { .s8, .s7, .s6, .s5, .s4 { grid-column:span 12; } }
+  @media (max-width:640px) { header, main { padding-left:16px; padding-right:16px; } }
+
+  /* Indicateurs */
+  .kpis { grid-column:span 12; display:grid; gap:16px; grid-template-columns:repeat(6, minmax(0, 1fr)); }
+  @media (max-width:1100px) { .kpis { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+  @media (max-width:640px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .kpi .value { font-size:22px; } }
+  .kpi { padding:16px 18px; }
+  .kpi .label { color:var(--muted); font-size:12px; font-weight:500; display:flex; align-items:center; gap:6px; }
+  .kpi .value { font-size:28px; font-weight:700; letter-spacing:-.02em; margin:6px 0 2px; }
+  .kpi .sub { color:var(--muted); font-size:12px; min-height:18px; }
+  .kpi.hero { border-color:rgba(139,92,246,.35); }
+  .meter { height:6px; border-radius:6px; background:var(--line); overflow:hidden; margin-top:8px; }
+  .meter i { display:block; height:100%; border-radius:6px; background:var(--violet); }
+
+  /* Graphique d'activité */
+  .chart { position:relative; }
+  .chart svg { width:100%; height:170px; display:block; overflow:visible; }
+  .axis { display:flex; justify-content:space-between; color:var(--dim); font-size:11px; margin-top:6px; }
+  .tip { position:absolute; pointer-events:none; padding:4px 8px; border-radius:6px; background:#000c; border:1px solid var(--line); font-size:12px; display:none; white-space:nowrap; }
+
+  /* Résumé des décisions */
+  .stack { display:flex; height:14px; border-radius:8px; overflow:hidden; background:var(--line); margin-bottom:12px; }
+  .stack i { display:block; height:100%; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-bottom:16px; font-size:12px; color:var(--muted); }
+  .legend b { color:var(--text); font-weight:600; }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+  .reasons { display:grid; gap:7px; max-height:300px; overflow:auto; padding-right:4px; }
+  .reason { display:grid; grid-template-columns:minmax(0, 1fr) 46px; gap:10px; align-items:center; font-size:13px; }
+  .reason .track { position:relative; height:26px; border-radius:7px; background:rgba(255,255,255,.03); overflow:hidden; }
+  .reason .track i { position:absolute; inset:0 auto 0 0; border-radius:7px; opacity:.28; }
+  .reason .track span { position:relative; display:block; padding:3px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .reason .n { text-align:right; color:var(--muted); }
+
+  /* Plateformes */
+  .platforms { display:grid; gap:10px; }
+  .plat { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:12px; align-items:center; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,.025); border:1px solid var(--line); }
+  .plat.off { opacity:.45; }
+  .plat .ico { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; font-weight:700; font-size:12px; color:#fff; }
+  .plat .name { font-weight:600; }
+  .plat .bar { height:5px; border-radius:5px; background:var(--line); margin-top:5px; overflow:hidden; }
+  .plat .bar i { display:block; height:100%; }
+  .plat .stats { text-align:right; font-size:12px; color:var(--muted); }
+  .plat .stats b { display:block; font-size:15px; color:var(--text); }
+
+  /* Tableaux */
+  .scroll { max-height:380px; overflow:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { position:sticky; top:0; z-index:1; background:var(--panel2); color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:8px 10px; border-bottom:1px solid rgba(35,43,59,.6); white-space:nowrap; }
+  tr:hover td { background:rgba(255,255,255,.025); }
+  .r { text-align:right; }
+  .tok { display:flex; align-items:center; gap:9px; }
+  .avatar { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:700; color:#fff; flex:none; }
+  .tok .sym { font-weight:600; max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+  .tok .mint { color:var(--dim); font-size:11px; font-family:ui-monospace, Menlo, monospace; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:600; max-width:260px; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
+  .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+  .empty { padding:28px 0; text-align:center; color:var(--dim); }
+  .filters { display:flex; gap:6px; flex-wrap:wrap; }
+  .seg { background:var(--panel); border:1px solid var(--line); color:var(--muted); padding:4px 11px; border-radius:999px; font:inherit; font-size:12px; cursor:pointer; }
+  .seg.on { color:var(--text); border-color:var(--violet); background:rgba(139,92,246,.15); }
+
+  /* Logs et rapports */
+  .term { background:#05070b; border:1px solid var(--line); border-radius:10px; padding:12px 14px; max-height:320px; overflow:auto; }
+  .term pre { margin:0; white-space:pre-wrap; word-break:break-word; font:12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; color:#b6bfd0; }
+  .report { max-height:560px; overflow:auto; padding-right:6px; font-size:13.5px; line-height:1.65; }
+  .report h3 { font-size:15px; margin:22px 0 8px; padding-top:14px; border-top:1px solid var(--line); color:var(--text); }
+  .report h3:first-child { margin-top:0; padding-top:0; border:0; }
+  .report h4 { font-size:13.5px; margin:14px 0 6px; color:var(--violet); }
+  .report p { margin:6px 0; color:#c7cedb; }
+  .report ul { margin:6px 0; padding-left:20px; color:#c7cedb; }
+  .report code { background:var(--line); padding:1px 5px; border-radius:4px; font-size:12px; }
+  .report table { margin:8px 0; }
+  .rules { display:flex; flex-wrap:wrap; gap:8px; }
+  .rules span { padding:5px 10px; border-radius:8px; background:rgba(255,255,255,.03); border:1px solid var(--line); font-size:12px; color:var(--muted); }
+  .rules b { color:var(--text); font-weight:600; }
+  @media (prefers-reduced-motion:reduce) { .dot.ok { animation:none; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>Brigitte</h1>
-  <span id="mode" class="badge">…</span>
-  <span id="feed"><span class="dot"></span>…</span>
-  <span id="uptime" class="muted"></span>
-  <span id="rules" class="muted"></span>
+  <div class="brand">
+    <div class="logo" aria-hidden="true">B</div>
+    <div><h1>Brigitte</h1><small>Bot memecoins Solana · tableau de bord temps réel</small></div>
+  </div>
+  <div class="status">
+    <span id="mode" class="pill">…</span>
+    <span id="feed" class="pill"><span class="dot"></span>…</span>
+    <span id="uptime" class="pill">…</span>
+  </div>
 </header>
+
 <main>
-  <section class="wide">
-    <div class="kpis" id="kpis"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card s8">
+    <h2>Activité · nouveaux tokens par minute <span class="hint" id="chartHint"></span></h2>
+    <div class="chart">
+      <svg id="spark" viewBox="0 0 600 170" preserveAspectRatio="none" role="img" aria-label="Nouveaux tokens par minute sur 60 minutes"></svg>
+      <div class="tip" id="tip"></div>
+      <div class="axis"><span>il y a 60 min</span><span>il y a 30 min</span><span>maintenant</span></div>
+    </div>
   </section>
-  <section class="wide">
-    <h2>Tokens pump.fun vus par minute (60 dernières minutes)</h2>
-    <svg id="spark" viewBox="0 0 600 70" preserveAspectRatio="none" role="img" aria-label="Débit de tokens par minute"></svg>
+
+  <section class="card s4">
+    <h2>Plateformes <span class="hint">dernière heure</span></h2>
+    <div class="platforms" id="platforms"></div>
   </section>
-  <section>
-    <h2>Positions ouvertes</h2>
-    <div class="scroll" id="open"></div>
-  </section>
-  <section>
-    <h2>Plateformes (dernière heure)</h2>
-    <div id="platforms"></div>
-  </section>
-  <section>
-    <h2>Entonnoir de décision (dernière heure)</h2>
+
+  <section class="card s5">
+    <h2>Pourquoi Brigitte n'achète pas <span class="hint">dernière heure</span></h2>
     <div id="funnel"></div>
   </section>
-  <section>
-    <h2>Flux live des nouveaux tokens</h2>
+
+  <section class="card s7">
+    <h2>Positions ouvertes <span class="hint" id="openHint"></span></h2>
+    <div class="scroll" id="open"></div>
+  </section>
+
+  <section class="card s12">
+    <h2>Flux live des nouveaux tokens
+      <span class="filters" id="filters">
+        <button class="seg on" data-f="all">Tous</button><button class="seg" data-f="buy">Achats</button><button class="seg" data-f="security">Sécurité</button><button class="seg" data-f="error">Erreurs</button>
+      </span>
+    </h2>
     <div class="scroll" id="tokens"></div>
   </section>
-  <section>
-    <h2>Trades fermés</h2>
+
+  <section class="card s7">
+    <h2>Historique des trades <span class="hint" id="closedHint"></span></h2>
     <div class="scroll" id="closed"></div>
   </section>
-  <section class="wide">
-    <h2>Logs du bot</h2>
-    <div class="scroll"><pre id="logs"></pre></div>
+
+  <section class="card s5">
+    <h2>Règles actives</h2>
+    <div class="rules" id="rules"></div>
   </section>
-  <section class="wide">
-    <h2>Analyses des agents</h2>
-    <div class="tabs"><button data-r="supervision" class="on">Superviseur (horaire)</button><button data-r="apprentissage">Apprentissage (6 h)</button></div>
-    <div class="scroll md" id="report" style="max-height:520px; margin-top:10px"></div>
+
+  <section class="card s12">
+    <h2>Analyses des agents
+      <span class="filters" id="tabs"><button class="seg on" data-r="supervision">Superviseur</button><button class="seg" data-r="apprentissage">Apprentissage</button></span>
+    </h2>
+    <div class="report" id="report"></div>
+  </section>
+
+  <section class="card s12">
+    <h2>Journal du bot <span class="hint">300 dernières lignes</span></h2>
+    <div class="term"><pre id="logs"></pre></div>
   </section>
 </main>
+
 <script>
 // Les noms et symboles de tokens viennent de n'importe qui : tout texte passe par esc().
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -90,77 +201,188 @@ const fmt = (n, d = 4) => (n == null ? "—" : Number(n).toFixed(d));
 const signed = (n, d = 4, suffix = "") => n == null ? "—" : `<span class="${n >= 0 ? "pos" : "neg"}">${n >= 0 ? "+" : ""}${Number(n).toFixed(d)}${suffix}</span>`;
 const time = (ms) => new Date(ms).toLocaleTimeString("fr-FR");
 const ago = (s) => (s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
-const coin = (mint, label) => `<a href="${mint.endsWith("pump") ? "https://pump.fun/coin/" : "https://solscan.io/token/"}${encodeURIComponent(mint)}" target="_blank" rel="noopener noreferrer">${esc(label || mint.slice(0, 6))}</a>`;
-const table = (head, rows) => rows.length ? `<table><tr>${head.map((h) => `<th class="${h.endsWith(" ") ? "r" : ""}">${h.trim()}</th>`).join("")}</tr>${rows.join("")}</table>` : `<p class="muted">Rien pour l'instant.</p>`;
-const decisionClass = (d) => d === "achat" ? "pos" : d === "en évaluation" ? "warn" : d.startsWith("erreur") ? "neg" : "muted";
+const link = (mint) => `${mint.endsWith("pump") ? "https://pump.fun/coin/" : "https://solscan.io/token/"}${encodeURIComponent(mint)}`;
+const table = (head, rows, empty = "Rien pour l'instant.") => rows.length
+  ? `<table><thead><tr>${head.map((h) => `<th class="${h.endsWith(" ") ? "r" : ""}">${h.trim()}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`
+  : `<div class="empty">${empty}</div>`;
 
-async function refresh() {
-  let s;
-  try { s = await (await fetch("api/state")).json(); } catch { $("feed").innerHTML = `<span class="dot" style="background:var(--red)"></span>bot injoignable`; return; }
+// Couleur stable par token (avatar) : dérivée du mint, pas du nom.
+const hue = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const token = (mint, symbol) => `<a class="tok" href="${link(mint)}" target="_blank" rel="noopener noreferrer">
+  <span class="avatar" style="background:hsl(${hue(mint)} 55% 42%)">${esc((symbol || "?").slice(0, 2).toUpperCase())}</span>
+  <span><span class="sym" style="display:block">${esc(symbol || mint.slice(0, 6))}</span><span class="mint">${esc(mint.slice(0, 4))}…${esc(mint.slice(-4))}</span></span></a>`;
+
+const PLATFORMS = {
+  "pump.fun": ["var(--green)", "P"], letsbonk: ["var(--orange)", "LB"], raydium: ["var(--violet)", "R"],
+  "meteora-dbc": ["var(--pink)", "M"], moonshot: ["var(--yellow)", "MS"],
+};
+const platColor = (p) => (PLATFORMS[p] ?? ["var(--dim)"])[0];
+const platChip = (p) => `<span class="chip"><span class="sw" style="background:${platColor(p)}"></span>${esc(p)}</span>`;
+
+// Catégories de décision : lecture en un coup d'œil de l'entonnoir et du flux.
+const CATS = {
+  buy: { label: "Achats", color: "var(--green)" },
+  pending: { label: "En évaluation", color: "var(--yellow)" },
+  security: { label: "Rejet sécurité", color: "var(--orange)" },
+  market: { label: "Filtre marché", color: "var(--blue)" },
+  error: { label: "Erreurs", color: "var(--red)" },
+};
+const SECURITY = /authority|extension|programme de token|rugcheck|holder|insider|créateur|liste noire|aller-retour|simulation|honeypot|mayhem/i;
+const category = (d = "") => d === "achat" ? "buy" : d === "en évaluation" ? "pending" : /^erreur|trop d'évaluations/.test(d) ? "error" : SECURITY.test(d) ? "security" : "market";
+const tag = (d) => { const c = CATS[category(d)].color; return `<span class="tag" title="${esc(d)}" style="color:${c};background:color-mix(in srgb, ${c} 14%, transparent)">${esc(d)}</span>`; };
+
+let filter = "all";
+let last;
+
+function render(s) {
   const r = s.rules;
-  $("mode").textContent = s.mode.toUpperCase();
-  $("mode").style.background = s.mode === "live" ? "var(--red)" : "var(--line)";
+  $("mode").className = `pill ${s.mode}`;
+  $("mode").textContent = s.mode === "live" ? "● LIVE · argent réel" : "PAPER · simulation";
   $("uptime").textContent = `en ligne depuis ${ago((s.now - s.startedAt) / 1000)}`;
-  $("rules").textContent = `TP ${r.takeProfitPct}% · SL ${r.stopLossPct}% · trailing ${r.trailPct}% après +${r.trailArmPct}% · max ${r.maxHoldSeconds}s · dev buy ${r.minDevBuySol}–${r.maxDevBuySol} SOL · délai ${r.entryDelaySeconds}s · inflow ≥ ${r.minInflowSol} SOL`;
 
   const silent = s.tokens.length ? (s.now - s.tokens[0].created_at) / 1000 : Infinity;
-  const color = silent < 60 ? "var(--green)" : silent < 300 ? "var(--yellow)" : "var(--red)";
-  $("feed").innerHTML = `<span class="dot" style="background:${color}"></span>flux PumpPortal : dernier token il y a ${silent === Infinity ? "—" : ago(silent)}`;
+  const state = silent < 60 ? "ok" : silent < 300 ? "slow" : "down";
+  $("feed").innerHTML = `<span class="dot ${state}"></span>${state === "down" ? "flux silencieux" : "flux actif"} · ${silent === Infinity ? "—" : `dernier token il y a ${ago(silent)}`}`;
 
+  // Indicateurs
   const nowMin = Math.floor(s.now / 60000);
   const counts = Array.from({ length: 60 }, (_, i) => s.perMinute.find((p) => p.m === nowMin - 59 + i)?.n ?? 0);
   const seenHour = counts.reduce((a, b) => a + b, 0);
   const last10 = counts.slice(-11, -1).reduce((a, b) => a + b, 0) / 10; // minutes complètes seulement
   const trades = s.totals.trades, wins = s.totals.wins ?? 0;
   const unrealized = s.open.reduce((a, p) => a + (p.value == null ? 0 : p.value - p.cost), 0);
-  const kpi = (label, value) => `<div class="kpi"><b>${value}</b><span>${label}</span></div>`;
+  const kpi = (label, value, sub = "", cls = "") => `<div class="card kpi ${cls}"><div class="label">${label}</div><div class="value num">${value}</div><div class="sub">${sub}</div></div>`;
+  const winRate = trades ? Math.round((wins / trades) * 100) : 0;
   $("kpis").innerHTML = [
-    kpi("PnL réalisé (SOL)", signed(s.realizedPnl)),
-    kpi("PnL latent (SOL)", s.open.length ? signed(unrealized) : "—"),
-    kpi("Trades gagnants", trades ? `${wins}/${trades} <small class="muted">${Math.round((wins / trades) * 100)}%</small>` : "0"),
-    kpi("Positions ouvertes", `${s.open.length}/${r.maxOpenPositions}`),
-    kpi("Tokens / min (10 min)", last10.toFixed(1)),
-    kpi("Tokens vus (1 h)", seenHour),
-    kpi("Achats (1 h)", s.funnel["achat"] ?? 0),
+    kpi("PnL réalisé", `${signed(s.realizedPnl)} <small class="muted" style="font-size:14px">SOL</small>`, `${trades} trade${trades > 1 ? "s" : ""} fermé${trades > 1 ? "s" : ""}`, "hero"),
+    kpi("PnL latent", s.open.length ? signed(unrealized) : '<span class="dim">—</span>', s.open.length ? "sur les positions ouvertes" : "aucune position ouverte"),
+    kpi("Taux de réussite", trades ? `${winRate}%` : '<span class="dim">—</span>', `${wins} gagnant${wins > 1 ? "s" : ""} sur ${trades}<div class="meter"><i style="width:${winRate}%;background:${winRate >= 50 ? "var(--green)" : "var(--orange)"}"></i></div>`),
+    kpi("Positions", `${s.open.length}<span class="dim">/${r.maxOpenPositions}</span>`, `${r.buySol} SOL par position<div class="meter"><i style="width:${(s.open.length / r.maxOpenPositions) * 100}%"></i></div>`),
+    kpi("Tokens analysés", seenHour, `dernière heure · ${last10.toFixed(1)}/min`),
+    kpi("Achats", s.funnel["achat"] ?? 0, `dernière heure · ${seenHour ? (((s.funnel["achat"] ?? 0) / seenHour) * 100).toFixed(1) : 0}% des tokens`),
   ].join("");
 
-  const max = Math.max(1, ...counts);
-  $("spark").innerHTML = counts.map((n, i) => `<rect x="${i * 10 + 1}" y="${70 - (n / max) * 66}" width="8" height="${(n / max) * 66}" fill="var(--blue)" rx="1"><title>${n} tokens</title></rect>`).join("");
+  // Graphique : aire + barres invisibles pour l'infobulle
+  const max = Math.max(1, ...counts), W = 600, H = 160, step = W / 59;
+  const pts = counts.map((n, i) => [i * step, H - (n / max) * (H - 12)]);
+  const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
+  const grid = [0.25, 0.5, 0.75].map((f) => `<line x1="0" x2="${W}" y1="${H * f}" y2="${H * f}" stroke="var(--line)" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>`).join("");
+  $("spark").innerHTML = `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8b5cf6" stop-opacity=".45"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></linearGradient></defs>
+    ${grid}<path d="${line}L${W},${H}L0,${H}Z" fill="url(#g)"/><path d="${line}" fill="none" stroke="#a78bfa" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    ${counts.map((n, i) => `<rect data-i="${i}" x="${i * step - step / 2}" y="0" width="${step}" height="${H}" fill="transparent"/>`).join("")}`;
+  $("spark").dataset.counts = counts.join(",");
+  $("chartHint").textContent = `pic ${max}/min · moyenne ${(seenHour / 60).toFixed(1)}/min`;
 
-  $("open").innerHTML = table(["Token", "Coût ", "Valeur ", "PnL ", "Plus haut ", "Tenu "], s.open.map((p) => {
-    const pnl = p.value == null ? null : ((p.value - p.cost) / p.cost) * 100;
-    return `<tr><td>${coin(p.mint, p.symbol)}</td><td class="r">${fmt(p.cost)}</td><td class="r">${fmt(p.value)}</td><td class="r">${signed(pnl, 1, "%")}</td><td class="r">${signed(((p.peak - p.cost) / p.cost) * 100, 1, "%")}</td><td class="r">${ago((s.now - p.openedAt) / 1000)}</td></tr>`;
-  }));
+  // Plateformes
+  const pmax = Math.max(1, ...s.platforms.map((p) => p.seen));
+  const known = new Set(s.platforms.map((p) => p.platform));
+  const plats = [...s.platforms, ...r.platforms.filter((p) => !known.has(p)).map((p) => ({ platform: p, seen: 0, bought: 0 }))];
+  $("platforms").innerHTML = plats.length ? plats.map((p) => {
+    const [color, abbr] = PLATFORMS[p.platform] ?? ["var(--dim)", "?"];
+    const on = r.platforms.includes(p.platform);
+    return `<div class="plat ${on ? "" : "off"}"><span class="ico" style="background:${color}">${abbr}</span>
+      <div><div class="name">${esc(p.platform)}${on ? "" : ' <span class="dim" style="font-weight:400">· non suivie</span>'}</div><div class="bar"><i style="width:${(p.seen / pmax) * 100}%;background:${color}"></i></div></div>
+      <div class="stats"><b class="num">${p.seen}</b>${p.bought ?? 0} achat${(p.bought ?? 0) > 1 ? "s" : ""}</div></div>`;
+  }).join("") : `<div class="empty">Aucune plateforme active.</div>`;
 
+  // Entonnoir : barre empilée par catégorie, puis le détail des motifs
   const funnel = Object.entries(s.funnel).sort((a, b) => b[1] - a[1]);
+  const total = funnel.reduce((a, [, n]) => a + n, 0);
+  const byCat = {};
+  for (const [k, n] of funnel) byCat[category(k)] = (byCat[category(k)] ?? 0) + n;
   const fmax = Math.max(1, ...funnel.map((f) => f[1]));
-  $("funnel").innerHTML = funnel.length ? funnel.map(([k, n]) => `<div class="bar"><span class="label ${decisionClass(k)}" title="${esc(k)}">${esc(k)}</span><div style="width:${(n / fmax) * 100}%${k === "achat" ? ";background:var(--green)" : ""}"></div><span class="muted">${n}</span></div>`).join("") : `<p class="muted">Aucun token depuis une heure.</p>`;
+  $("funnel").innerHTML = total ? `
+    <div class="stack">${Object.keys(CATS).filter((c) => byCat[c]).map((c) => `<i title="${CATS[c].label} : ${byCat[c]}" style="width:${(byCat[c] / total) * 100}%;background:${CATS[c].color}"></i>`).join("")}</div>
+    <div class="legend">${Object.keys(CATS).filter((c) => byCat[c]).map((c) => `<span><span class="sw" style="background:${CATS[c].color}"></span>${CATS[c].label} <b class="num">${byCat[c]}</b></span>`).join("")}</div>
+    <div class="reasons">${funnel.map(([k, n]) => `<div class="reason"><div class="track"><i style="width:${(n / fmax) * 100}%;background:${CATS[category(k)].color}"></i><span title="${esc(k)}">${esc(k)}</span></div><span class="n num">${n}</span></div>`).join("")}</div>`
+    : `<div class="empty">Aucun token depuis une heure.</div>`;
 
-  $("platforms").innerHTML = table(["Plateforme", "Tokens vus ", "Achats ", "Suivie"], s.platforms.map((p) =>
-    `<tr><td>${esc(p.platform)}</td><td class="r">${p.seen}</td><td class="r">${p.bought ?? 0}</td><td>${r.platforms.includes(p.platform) ? "oui" : '<span class="muted">non</span>'}</td></tr>`));
+  // Positions ouvertes
+  $("openHint").textContent = s.open.length ? `${s.open.length} sur ${r.maxOpenPositions}` : "";
+  $("open").innerHTML = table(["Token", "Mise ", "Valeur ", "PnL ", "Plus haut ", "Tenue "], s.open.map((p) => {
+    const pnl = p.value == null ? null : ((p.value - p.cost) / p.cost) * 100;
+    return `<tr><td>${token(p.mint, p.symbol)}</td><td class="r num">${fmt(p.cost)}</td><td class="r num">${fmt(p.value)}</td><td class="r num"><b>${signed(pnl, 1, "%")}</b></td><td class="r num">${signed(((p.peak - p.cost) / p.cost) * 100, 1, "%")}</td><td class="r num">${ago((s.now - p.openedAt) / 1000)} <span class="dim">/ ${r.maxHoldSeconds}s</span></td></tr>`;
+  }), "Aucune position ouverte : Brigitte attend un token qui passe tous les contrôles.");
 
-  $("tokens").innerHTML = table(["Heure", "Plateforme", "Token", "Dev buy ", "Mcap ", "Décision"], s.tokens.map((t) =>
-    `<tr><td class="muted">${time(t.created_at)}</td><td class="muted">${esc(t.platform ?? "pump.fun")}</td><td>${coin(t.mint, t.symbol)}</td><td class="r">${fmt(t.dev_buy_sol, 2)}</td><td class="r">${fmt(t.mcap_sol, 1)}</td><td class="${decisionClass(t.decision ?? "")}">${esc(t.decision)}</td></tr>`));
+  // Flux live
+  const rows = s.tokens.filter((t) => filter === "all" || category(t.decision ?? "") === filter);
+  $("tokens").innerHTML = table(["Heure", "Token", "Plateforme", "Dev buy ", "Mcap ", "Décision"], rows.map((t) =>
+    `<tr><td class="muted num">${time(t.created_at)}</td><td>${token(t.mint, t.symbol)}</td><td>${platChip(t.platform ?? "pump.fun")}</td><td class="r num">${t.dev_buy_sol == null ? '<span class="dim">—</span>' : `${fmt(t.dev_buy_sol, 2)} <span class="dim">SOL</span>`}</td><td class="r num">${t.mcap_sol == null ? '<span class="dim">—</span>' : `${fmt(t.mcap_sol, 1)} <span class="dim">SOL</span>`}</td><td>${tag(t.decision ?? "")}</td></tr>`),
+    "Aucun token dans cette catégorie.");
 
-  $("closed").innerHTML = table(["Fermé", "Token", "PnL ", "PnL % ", "Durée ", "Sortie"], s.closed.map((c) =>
-    `<tr><td class="muted">${time(c.closed_at)}</td><td>${coin(c.mint, c.symbol)}</td><td class="r">${signed(c.proceeds - c.cost)}</td><td class="r">${signed(((c.proceeds - c.cost) / c.cost) * 100, 1, "%")}</td><td class="r">${ago((c.closed_at - c.opened_at) / 1000)}</td><td>${esc(c.exit_reason)}</td></tr>`));
+  // Trades fermés
+  const pnlSum = s.closed.reduce((a, c) => a + (c.proceeds - c.cost), 0);
+  $("closedHint").innerHTML = s.closed.length ? `${s.closed.length} derniers · ${signed(pnlSum)} SOL` : "";
+  $("closed").innerHTML = table(["Fermé", "Token", "PnL ", "PnL % ", "Durée ", "Sortie"], s.closed.map((c) => {
+    const pct = ((c.proceeds - c.cost) / c.cost) * 100;
+    return `<tr><td class="muted num">${time(c.closed_at)}</td><td>${token(c.mint, c.symbol)}</td><td class="r num">${signed(c.proceeds - c.cost)}</td><td class="r num"><b>${signed(pct, 1, "%")}</b></td><td class="r num">${ago((c.closed_at - c.opened_at) / 1000)}</td><td>${tag(c.exit_reason)}</td></tr>`;
+  }), "Aucun trade fermé pour l'instant.");
 
+  // Règles
+  const rule = (k, v) => `<span>${k} <b>${v}</b></span>`;
+  $("rules").innerHTML = [
+    rule("Take profit", `+${r.takeProfitPct}%`), rule("Stop loss", `-${Math.abs(r.stopLossPct)}%`), rule("Trailing", `${r.trailPct}% après +${r.trailArmPct}%`),
+    rule("Durée max", `${r.maxHoldSeconds}s`), rule("Mise", `${r.buySol} SOL`), rule("Dev buy", `${r.minDevBuySol}–${r.maxDevBuySol} SOL`),
+    rule("Délai d'entrée", `${r.entryDelaySeconds}s`), rule("Inflow min", `${r.minInflowSol} SOL`), rule("Liquidité min", `${r.minLiquiditySol} SOL`),
+    rule("Score RugCheck max", r.maxRugScore), rule("Top 10 holders max", `${r.maxTop10Pct}%`), rule("Aller-retour max", `-${r.maxRoundTripLossPct}%`),
+  ].join("");
+
+  // Journal
   const box = $("logs").parentElement, atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
   $("logs").innerHTML = s.logs.map((l) => `<span class="${/\[err\]|Error|erreur/i.test(l) ? "neg" : /\[buy\]/.test(l) ? "pos" : /\[sell\]/.test(l) ? "warn" : ""}">${esc(l)}</span>`).join("\n");
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
 
-// Markdown minimal des rapports : titres, gras, code ; le reste en texte brut échappé.
-const md = (text) => text ? esc(text).split("\n").map((l) => /^#{1,3} /.test(l) ? `<h3>${l.replace(/^#+ /, "")}</h3>` : l)
-  .join("\n").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>") : "";
+async function refresh() {
+  try { last = await (await fetch("api/state")).json(); } catch {
+    $("feed").innerHTML = `<span class="dot down"></span>bot injoignable`;
+    return;
+  }
+  render(last);
+}
+
+// Infobulle du graphique
+$("spark").addEventListener("mousemove", (e) => {
+  const i = e.target.dataset?.i;
+  if (i == null) return;
+  const n = $("spark").dataset.counts.split(",")[i], box = $("spark").getBoundingClientRect();
+  $("tip").style.display = "block";
+  $("tip").style.left = `${Math.min(e.clientX - box.left + 10, box.width - 140)}px`;
+  $("tip").style.top = `${e.clientY - box.top - 30}px`;
+  $("tip").textContent = `il y a ${59 - i} min · ${n} token${n > 1 ? "s" : ""}`;
+});
+$("spark").addEventListener("mouseleave", () => ($("tip").style.display = "none"));
+
+$("filters").addEventListener("click", (e) => {
+  if (!e.target.dataset.f) return;
+  filter = e.target.dataset.f;
+  $("filters").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === e.target));
+  if (last) render(last);
+});
+
+// Markdown minimal des rapports : titres, listes, gras, code ; tout est échappé d'abord.
+const inline = (l) => l.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+function md(text) {
+  let html = "", list = false;
+  for (const l of esc(text).split("\n")) {
+    const item = /^\s*[-*] (.*)/.exec(l);
+    if (!item && list) { html += "</ul>"; list = false; }
+    if (item) { if (!list) { html += "<ul>"; list = true; } html += `<li>${inline(item[1])}</li>`; }
+    else if (/^#{1,2} /.test(l)) html += `<h3>${inline(l.replace(/^#+ /, ""))}</h3>`;
+    else if (/^#{3,} /.test(l)) html += `<h4>${inline(l.replace(/^#+ /, ""))}</h4>`;
+    else if (l.trim()) html += `<p>${inline(l)}</p>`;
+  }
+  return html + (list ? "</ul>" : "");
+}
 let reports = {}, tab = "supervision";
 async function refreshReports() {
   try { reports = await (await fetch("api/reports")).json(); } catch { return; }
-  $("report").innerHTML = `<pre>${md(reports[tab]) || '<span class="muted">Pas encore de rapport.</span>'}</pre>`;
+  $("report").innerHTML = reports[tab] ? md(reports[tab]) : `<div class="empty">Pas encore de rapport.</div>`;
 }
-document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
-  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  tab = b.dataset.r;
+$("tabs").addEventListener("click", (e) => {
+  if (!e.target.dataset.r) return;
+  tab = e.target.dataset.r;
+  $("tabs").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === e.target));
   refreshReports();
 });
 
