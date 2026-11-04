@@ -278,6 +278,7 @@ const EXPLAIN = [
   [/^créateur/, "Créateur en série", (r) => `Le créateur a lancé plus de ${r.maxCreatorLaunches24h} tokens en 24 h : profil typique des arnaques à la chaîne.`],
   [/^aller-retour/, "Achat-revente trop perdant", (r) => `Simulation d'un achat suivi d'une revente immédiate : on perdrait plus de ${r.maxRoundTripLossPct} % (taxes, frais ou liquidité trop faible).`],
   [/^simulation impossible/, "Invendable selon Jupiter", () => "Jupiter ne trouve aucun chemin pour acheter puis revendre ce token : on ne pourrait pas en sortir."],
+  [/^en pause/, "Achats en pause", () => "Les achats automatiques sont suspendus depuis Telegram (/reprendre pour les relancer)."],
   [/^capacité max/, "Toutes les places sont prises", (r) => `Brigitte a déjà ${r.maxOpenPositions} positions ouvertes, le maximum autorisé.`],
   [/^trop d'évaluations/, "Brigitte débordée", (r) => `Déjà ${r.maxEvaluations} tokens en cours d'analyse : celui-ci a été ignoré pour ne pas surcharger les API.`],
   [/^déjà migré/, "Déjà migré", () => "Le token a déjà quitté sa phase de lancement pour un marché classique : on arrive trop tard."],

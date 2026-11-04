@@ -59,7 +59,7 @@ export function startDashboard(liveValue: (mint: string) => bigint | undefined) 
   // Jamais de secrets dans la page : clé privée, clés API, URL RPC (Helius y met sa clé).
   void refreshSolUsd();
   setInterval(refreshSolUsd, 60_000);
-  const { privateKey, rpcUrl, jupiterApiKey, pumpPortalApiKey, ...rules } = config;
+  const { privateKey, rpcUrl, jupiterApiKey, pumpPortalApiKey, telegramToken, ...rules } = config;
   createServer(async (req, res) => {
     try {
       if (req.url === "/api/state") return json(res, { ...state(liveValue), rules });
