@@ -96,6 +96,7 @@
   td { padding:8px 10px; border-bottom:1px solid rgba(35,43,59,.6); white-space:nowrap; }
   tr:hover td { background:rgba(255,255,255,.025); }
   .r { text-align:right; }
+  .usd { display:block; color:var(--muted); font-size:11.5px; }
   .tok { display:flex; align-items:center; gap:9px; }
   .avatar { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:700; color:#fff; flex:none; }
   .tok .sym { font-weight:600; max-width:150px; overflow:hidden; text-overflow:ellipsis; }
@@ -204,6 +205,7 @@ const fmt = (n, d = 4) => (n == null ? "—" : Number(n).toFixed(d));
 const signed = (n, d = 4, suffix = "") => n == null ? "—" : `<span class="${n >= 0 ? "pos" : "neg"}">${n >= 0 ? "+" : ""}${Number(n).toFixed(d)}${suffix}</span>`;
 const time = (ms) => new Date(ms).toLocaleTimeString("fr-FR");
 const ago = (s) => (s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
+const usd = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD", notation: n >= 10_000 ? "compact" : "standard", maximumFractionDigits: n >= 10_000 ? 1 : 0 });
 const link = (mint) => `${mint.endsWith("pump") ? "https://pump.fun/coin/" : "https://solscan.io/token/"}${encodeURIComponent(mint)}`;
 const table = (head, rows, empty = "Rien pour l'instant.") => rows.length
   ? `<table><thead><tr>${head.map((h) => `<th class="${h.endsWith(" ") ? "r" : ""}">${h.trim()}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`
@@ -354,8 +356,9 @@ function render(s) {
 
   // Flux live
   const rows = s.tokens.filter((t) => filter === "all" || category(t.decision ?? "") === filter);
+  const solCell = (v, d) => v == null ? '<span class="dim">—</span>' : `${fmt(v, d)} <span class="dim">SOL</span>${s.solUsd ? `<span class="usd">${usd(v * s.solUsd)}</span>` : ""}`;
   $("tokens").innerHTML = table(["Heure", "Token", "Plateforme", "Dev buy ", "Mcap ", "Décision"], rows.map((t) =>
-    `<tr><td class="muted num">${time(t.created_at)}</td><td>${token(t.mint, t.symbol)}</td><td>${platChip(t.platform ?? "pump.fun")}</td><td class="r num">${t.dev_buy_sol == null ? '<span class="dim">—</span>' : `${fmt(t.dev_buy_sol, 2)} <span class="dim">SOL</span>`}</td><td class="r num">${t.mcap_sol == null ? '<span class="dim">—</span>' : `${fmt(t.mcap_sol, 1)} <span class="dim">SOL</span>`}</td><td>${tag(t.decision ?? "")}</td></tr>`),
+    `<tr><td class="muted num">${time(t.created_at)}</td><td>${token(t.mint, t.symbol)}</td><td>${platChip(t.platform ?? "pump.fun")}</td><td class="r num">${solCell(t.dev_buy_sol, 2)}</td><td class="r num">${solCell(t.mcap_sol, 1)}</td><td>${tag(t.decision ?? "")}</td></tr>`),
     "Aucun token dans cette catégorie.");
 
   // Trades fermés
