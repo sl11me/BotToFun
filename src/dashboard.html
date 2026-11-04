@@ -52,8 +52,9 @@
   .card > h2::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); margin-right:-2px; }
   .card > h2 .filters { margin-left:auto; }
   .card > h2 .hint { margin-left:auto; font-weight:400; color:var(--muted); font-size:12px; text-transform:none; letter-spacing:0; }
-  .s12 { grid-column:span 12; } .s8 { grid-column:span 8; } .s7 { grid-column:span 7; } .s6 { grid-column:span 6; } .s5 { grid-column:span 5; } .s4 { grid-column:span 4; }
-  @media (max-width:1100px) { .s8, .s7, .s6, .s5, .s4 { grid-column:span 12; } }
+  .s12 { grid-column:span 12; } .s8 { grid-column:span 8; } .s7 { grid-column:span 7; } .s6 { grid-column:span 6; } .s5 { grid-column:span 5; } .s4 { grid-column:span 4; } .s3 { grid-column:span 3; }
+  @media (max-width:1300px) { .s5, .s4 { grid-column:span 6; } .s3 { grid-column:span 12; } }
+  @media (max-width:1100px) { .s8, .s7, .s6, .s5, .s4, .s3 { grid-column:span 12; } }
   @media (max-width:640px) { header, main { padding-left:16px; padding-right:16px; } }
 
   /* Indicateurs */
@@ -155,7 +156,7 @@
 <main>
   <div class="kpis" id="kpis"></div>
 
-  <section class="card s8">
+  <section class="card s5">
     <h2>Activité · nouveaux tokens par minute <span class="hint" id="chartHint"></span></h2>
     <div class="chart">
       <svg id="spark" viewBox="0 0 600 170" preserveAspectRatio="none" role="img" aria-label="Nouveaux tokens par minute sur 60 minutes"></svg>
@@ -165,18 +166,23 @@
   </section>
 
   <section class="card s4">
+    <h2>Positions ouvertes <span class="hint" id="openHint"></span></h2>
+    <div class="scroll" id="open"></div>
+  </section>
+
+  <section class="card s3">
     <h2>Plateformes <span class="hint">dernière heure</span></h2>
     <div class="platforms" id="platforms"></div>
   </section>
 
-  <section class="card s5">
+  <section class="card s7">
     <h2>Pourquoi Brigitte n'achète pas <span class="hint">dernière heure</span></h2>
     <div id="funnel"></div>
   </section>
 
-  <section class="card s7">
-    <h2>Positions ouvertes <span class="hint" id="openHint"></span></h2>
-    <div class="scroll" id="open"></div>
+  <section class="card s5">
+    <h2>Règles actives</h2>
+    <div class="rules" id="rules"></div>
   </section>
 
   <section class="card s12">
@@ -188,14 +194,9 @@
     <div class="scroll" id="tokens"></div>
   </section>
 
-  <section class="card s7">
+  <section class="card s12">
     <h2>Historique des trades <span class="hint" id="closedHint"></span></h2>
     <div class="scroll" id="closed"></div>
-  </section>
-
-  <section class="card s5">
-    <h2>Règles actives</h2>
-    <div class="rules" id="rules"></div>
   </section>
 
   <section class="card s12">
@@ -363,10 +364,11 @@ function render(s) {
 
   // Positions ouvertes
   $("openHint").textContent = s.open.length ? `${s.open.length} sur ${r.maxOpenPositions}` : "";
-  $("open").innerHTML = table(["Token", "Mise ", "Valeur ", "PnL ", "Plus haut ", "Tenue "], s.open.map((p) => {
+  $("open").innerHTML = table(["Token", "PnL ", "Tenue "], s.open.map((p) => {
     const pnl = p.value == null ? null : ((p.value - p.cost) / p.cost) * 100;
-    return `<tr><td>${token(p.mint, p.symbol)}</td><td class="r num">${fmt(p.cost)}</td><td class="r num">${fmt(p.value)}</td><td class="r num"><b>${signed(pnl, 1, "%")}</b></td><td class="r num">${signed(((p.peak - p.cost) / p.cost) * 100, 1, "%")}</td><td class="r num">${ago((s.now - p.openedAt) / 1000)} <span class="dim">/ ${r.maxHoldSeconds}s</span></td></tr>`;
-  }), "Aucune position ouverte : Brigitte attend un token qui passe tous les contrôles.");
+    const peak = ((p.peak - p.cost) / p.cost) * 100;
+    return `<tr><td>${token(p.mint, p.symbol)}</td><td class="r num" title="Mise ${fmt(p.cost)} SOL · plus haut ${peak >= 0 ? "+" : ""}${peak.toFixed(1)}%"><b>${signed(pnl, 1, "%")}</b><span class="usd">${fmt(p.value)} SOL</span></td><td class="r num">${ago((s.now - p.openedAt) / 1000)}<span class="usd">sur ${r.maxHoldSeconds}s</span></td></tr>`;
+  }), "Aucune position : Brigitte attend un token qui passe tous les contrôles.");
 
   // Flux live
   const rows = s.tokens.filter((t) => filter === "all" || category(t.decision ?? "") === filter);
