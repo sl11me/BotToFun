@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import { config } from "./config.ts";
 import { dashboardData, openPositions, realizedPnlSol } from "./db.ts";
+import { SOL_MINT, tokenInfo } from "./jupiter.ts";
 
 // Copie des derniers logs console pour la page ; le terminal / Docker garde les logs complets.
 const logs: string[] = [];
@@ -16,6 +17,9 @@ for (const level of ["log", "error"] as const) {
 
 const startedAt = Date.now();
 const sol = (lamports: unknown) => Number(lamports ?? 0) / 1e9;
+// Prix du SOL en dollars pour la page, rafraîchi chaque minute ; garde la dernière valeur si Jupiter ne répond pas.
+let solUsd: number | null = null;
+const refreshSolUsd = () => tokenInfo([SOL_MINT]).then(([t]) => { solUsd = t?.usdPrice ?? solUsd; }).catch(() => {});
 const report = async (path: string) => (await readFile(path, "utf8").catch(() => "")).slice(0, 12_000);
 
 function state(liveValue: (mint: string) => bigint | undefined) {
@@ -31,6 +35,7 @@ function state(liveValue: (mint: string) => bigint | undefined) {
     now,
     startedAt,
     mode: config.mode,
+    solUsd,
     realizedPnl: realizedPnlSol(),
     totals: d.totals,
     funnel,
@@ -52,6 +57,8 @@ const json = (res: ServerResponse, body: unknown) => res.writeHead(200, { "conte
 export function startDashboard(liveValue: (mint: string) => bigint | undefined) {
   if (!config.dashboardPort) return;
   // Jamais de secrets dans la page : clé privée, clés API, URL RPC (Helius y met sa clé).
+  void refreshSolUsd();
+  setInterval(refreshSolUsd, 60_000);
   const { privateKey, rpcUrl, jupiterApiKey, pumpPortalApiKey, ...rules } = config;
   createServer(async (req, res) => {
     try {
