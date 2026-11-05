@@ -1,12 +1,12 @@
 // En premier : le dashboard capture console.log dès le démarrage.
 import { startDashboard } from "./dashboard.ts";
 import { isOffCurveAddress, type Address } from "@solana/kit";
-import { fetchCurve, fetchMetadata, fetchMint, fetchRugReport } from "./chain.ts";
+import { fetchBalance, fetchCurve, fetchMetadata, fetchMint, fetchRugReport } from "./chain.ts";
 import { config } from "./config.ts";
 import { closePosition, isBlacklisted, isKnown, logToken, openPosition, openPositions, realizedPnlSol, updatePeak, type Position } from "./db.ts";
 import { onNewLaunch, onNewToken } from "./feed.ts";
 import { h, isMint, notify, startTelegram } from "./telegram.ts";
-import { quote, SOL_MINT, swap, tokenInfo } from "./jupiter.ts";
+import { quote, SOL_MINT, swap, tokenInfo, walletAddress } from "./jupiter.ts";
 import {
   buyQuote,
   exitReason,
@@ -256,6 +256,16 @@ setInterval(() => {
   for (const p of openPositions()) void guarded(p.mint, () => check(p));
 }, config.pollSeconds * 1000);
 
+/** Adresse et solde du wallet, pour vérifier au démarrage que c'est le bon. Jamais la clé, même dans une erreur. */
+async function walletLine(): Promise<string> {
+  if (!config.privateKey) return "aucun wallet (BS58_PRIVATE_KEY vide)";
+  const address = await walletAddress().catch(() => null);
+  if (!address) return "BS58_PRIVATE_KEY invalide";
+  const balance = await fetchBalance(address).then((sol) => `${sol.toFixed(4)} SOL`, () => "solde illisible");
+  return `wallet ${address} · ${balance}`;
+}
+
 startDashboard((mint) => values.get(mint));
-console.log(`Brigitte démarrée en mode ${config.mode.toUpperCase()} | ${config.buySol} SOL/position, max ${config.maxOpenPositions}`);
-notify(`🚀 Brigitte démarrée en mode <b>${config.mode.toUpperCase()}</b> · ${config.buySol} SOL/position, max ${config.maxOpenPositions}`);
+const wallet = await walletLine();
+console.log(`Brigitte démarrée en mode ${config.mode.toUpperCase()} | ${config.buySol} SOL/position, max ${config.maxOpenPositions} | ${wallet}`);
+notify(`🚀 Brigitte démarrée en mode <b>${config.mode.toUpperCase()}</b> · ${config.buySol} SOL/position, max ${config.maxOpenPositions}\n${h(wallet)}`);

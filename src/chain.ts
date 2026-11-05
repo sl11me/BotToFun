@@ -31,6 +31,19 @@ export async function fetchMetadata(uri: string): Promise<Record<string, unknown
   throw new Error(`métadonnées ${status}`);
 }
 
+/** Solde d'un wallet en SOL. */
+export async function fetchBalance(address: string): Promise<number> {
+  const res = await fetch(config.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [address, { commitment: "confirmed" }] }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  const lamports = ((await res.json()) as any).result?.value;
+  if (typeof lamports !== "number") throw new Error(`getBalance ${res.status}`);
+  return lamports / 1e9;
+}
+
 /** Programme propriétaire d'un compte (sert à reconnaître la plateforme d'une pool). */
 export async function accountOwner(address: string): Promise<string | undefined> {
   const res = await fetch(config.rpcUrl, {
