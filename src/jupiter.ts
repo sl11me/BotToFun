@@ -22,6 +22,9 @@ async function getSigner() {
   return signer;
 }
 
+/** Adresse publique du wallet de Brigitte, déduite de BS58_PRIVATE_KEY. */
+export const walletAddress = async () => (await getSigner()).address;
+
 async function order(inputMint: string, outputMint: string, amount: bigint, taker?: string): Promise<Order> {
   const params = new URLSearchParams({ inputMint, outputMint, amount: amount.toString() });
   if (taker) params.set("taker", taker);
