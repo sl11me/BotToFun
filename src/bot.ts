@@ -3,10 +3,10 @@ import { startDashboard } from "./dashboard.ts";
 import { isOffCurveAddress, type Address } from "@solana/kit";
 import { fetchBalance, fetchCurve, fetchMetadata, fetchMint, fetchRugReport } from "./chain.ts";
 import { config } from "./config.ts";
-import { closePosition, isBlacklisted, isKnown, logToken, openPosition, openPositions, realizedPnlSol, updatePeak, type Position } from "./db.ts";
+import { closePosition, isBlacklisted, isKnown, logPrice, logToken, openPosition, openPositions, realizedPnlSol, updatePeak, type Position } from "./db.ts";
 import { onNewLaunch, onNewToken } from "./feed.ts";
 import { h, isMint, notify, startTelegram } from "./telegram.ts";
-import { quote, SOL_MINT, swap, tokenInfo, walletAddress } from "./jupiter.ts";
+import { closeTokenAccount, quote, SOL_MINT, swap, tokenInfo, walletAddress } from "./jupiter.ts";
 import {
   buyQuote,
   exitReason,
@@ -29,6 +29,8 @@ const live = config.mode === "live";
 const busy = new Set<string>(); // mints en cours d'évaluation/achat/vente, évite les doubles ordres
 const lamports = (sol: number) => BigInt(Math.round(sol * 1e9));
 const txCost = lamports(config.txCostSol);
+// Rent du compte de token rendue à sa fermeture après la vente, moins les frais de base de cette transaction.
+const CLOSE_FEE = 5_000n;
 let evaluating = 0; // tokens en cours d'évaluation (attente du délai comprise)
 let buying = 0; // achats en cours : places de position réservées
 const values = new Map<string, bigint>(); // dernière valeur de revente de chaque position, pour le dashboard
@@ -101,7 +103,7 @@ async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve:
     if (roundTrip) return roundTrip;
 
     const tokenAmount = live ? (await swap(SOL_MINT, t.mint, spend)).outAmount : curve ? buyQuote(curve, spend) : simulated.out;
-    // Coût complet : mise + frais de transaction + rent du compte de token (Jupiter ne le referme pas).
+    // Coût complet : mise + frais de transaction + rent du compte de token (rendue à la vente, voir check).
     const cost = spend + txCost + lamports(config.ataRentSol);
     openPosition({ mint: t.mint, symbol: t.symbol, bondingCurve, costLamports: cost, tokenAmount, openedAt: Date.now() });
     console.log(`[buy] ${t.symbol} ${t.mint} : ${config.buySol} SOL -> ${tokenAmount} tokens${curve ? ` (mcap ${mcapSol(curve)} SOL)` : ""}`);
@@ -122,10 +124,15 @@ async function check(p: Position, forced?: string) {
   const peak = value > p.peakLamports ? value : p.peakLamports;
   if (peak !== p.peakLamports) updatePeak(p.mint, peak);
   values.set(p.mint, value);
+  logPrice(p.mint, value);
 
   const reason = forced ?? exitReason(p.costLamports, value, peak, (Date.now() - p.openedAt) / 1000, config);
   if (!reason) return;
-  const proceeds = live ? (await swap(p.mint, SOL_MINT, p.tokenAmount)).outAmount - txCost : value;
+  const sold = live ? (await swap(p.mint, SOL_MINT, p.tokenAmount)).outAmount - txCost : value;
+  const rent = live
+    ? await closeTokenAccount(p.mint).catch((e) => (console.error(`[close] ${p.symbol} ${(e as Error).message}`), 0n))
+    : lamports(config.ataRentSol);
+  const proceeds = sold + (rent > 0n ? rent - CLOSE_FEE : 0n);
   closePosition(p.mint, proceeds, reason);
   values.delete(p.mint);
   console.log(`[sell] ${p.symbol} ${reason} -> ${Number(proceeds) / 1e9} SOL | PnL réalisé : ${realizedPnlSol().toFixed(4)} SOL`);

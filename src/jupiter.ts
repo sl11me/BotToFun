@@ -1,9 +1,19 @@
 import {
+  AccountRole,
+  address,
+  appendTransactionMessageInstruction,
   createKeyPairSignerFromBytes,
+  createSolanaRpc,
+  createTransactionMessage,
+  getBase64EncodedWireTransaction,
   getBase58Encoder,
   getTransactionDecoder,
   getTransactionEncoder,
   partiallySignTransaction,
+  pipe,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  signTransactionMessageWithSigners,
   type KeyPairSigner,
 } from "@solana/kit";
 import { config } from "./config.ts";
@@ -60,6 +70,38 @@ export async function swap(inputMint: string, outputMint: string, amount: bigint
   const r = (await res.json()) as { status: string; signature: string; code: number; totalOutputAmount: string; error?: string };
   if (r.status !== "Success") throw new Error(`swap échoué (code ${r.code}) ${r.signature ?? ""} ${r.error ?? ""}`);
   return { signature: r.signature, outAmount: BigInt(r.totalOutputAmount) };
+}
+
+/**
+ * Referme le compte de token du wallet après une vente totale pour récupérer sa rent (~0,002 SOL) :
+ * Jupiter le crée à l'achat mais ne le referme jamais. Renvoie la rent rendue, 0 si le compte est absent ou pas vide.
+ */
+export async function closeTokenAccount(mint: string): Promise<bigint> {
+  const s = await getSigner();
+  const rpc = createSolanaRpc(config.rpcUrl);
+  const { value } = await rpc.getTokenAccountsByOwner(s.address, { mint: address(mint) }, { encoding: "jsonParsed", commitment: "confirmed" }).send();
+  const acc = value[0] as any;
+  if (!acc || acc.account.data.parsed.info.tokenAmount.amount !== "0") return 0n;
+  const close = {
+    programAddress: acc.account.owner, // SPL Token ou Token-2022 : même instruction
+    accounts: [
+      { address: acc.pubkey, role: AccountRole.WRITABLE },
+      { address: s.address, role: AccountRole.WRITABLE },
+      { address: s.address, role: AccountRole.READONLY_SIGNER, signer: s },
+    ],
+    data: new Uint8Array([9]), // CloseAccount
+  };
+  const { value: blockhash } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
+  const message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(s, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
+    (m) => appendTransactionMessageInstruction(close, m),
+  );
+  const tx = await signTransactionMessageWithSigners(message);
+  // shortcut: envoi sans attendre la confirmation ; si la tx échoue, la rent comptée reste dans le compte (récupérable à la main).
+  await rpc.sendTransaction(getBase64EncodedWireTransaction(tx), { encoding: "base64" }).send();
+  return BigInt(acc.account.lamports);
 }
 
 // Tokens API v2 : https://developers.jup.ag/docs/api-reference/tokens
