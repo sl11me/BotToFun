@@ -106,7 +106,7 @@ export function realizedPnlSol(): number {
 /** Lectures du tableau de bord : derniers tokens, décisions et débit depuis `since` (ms), trades fermés. */
 export function dashboardData(since: number) {
   return {
-    tokens: db.prepare("SELECT mint, symbol, created_at, dev_buy_sol, mcap_sol, decision, platform FROM tokens ORDER BY created_at DESC LIMIT 60").all(),
+    tokens: db.prepare("SELECT mint, symbol, name, created_at, dev_buy_sol, mcap_sol, decision, platform FROM tokens ORDER BY created_at DESC LIMIT 60").all(),
     platforms: db
       .prepare("SELECT COALESCE(platform, 'pump.fun') AS platform, COUNT(*) AS seen, SUM(decision = 'achat') AS bought FROM tokens WHERE created_at >= ? GROUP BY 1 ORDER BY 2 DESC")
       .all(since),
