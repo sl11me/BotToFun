@@ -31,6 +31,13 @@ db.exec(`
     decision TEXT,
     platform TEXT
   );
+  -- Valeur de chaque position à chaque vérification : permet de rejouer d'autres règles de sortie.
+  CREATE TABLE IF NOT EXISTS position_prices (
+    mint TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    value_lamports TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS position_prices_mint ON position_prices (mint);
 `);
 // Migration des bases créées avant le suivi multi-plateformes.
 if (!(db.prepare("PRAGMA table_info(tokens)").all() as { name: string }[]).some((c) => c.name === "platform"))
@@ -63,6 +70,10 @@ export function openPosition(p: Omit<Position, "peakLamports">) {
 
 export function updatePeak(mint: string, peak: bigint) {
   db.prepare("UPDATE positions SET peak_lamports = ? WHERE mint = ?").run(peak.toString(), mint);
+}
+
+export function logPrice(mint: string, valueLamports: bigint) {
+  db.prepare("INSERT INTO position_prices (mint, at, value_lamports) VALUES (?, ?, ?)").run(mint, Date.now(), valueLamports.toString());
 }
 
 export function closePosition(mint: string, proceedsLamports: bigint, reason: string) {
