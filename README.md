@@ -30,6 +30,20 @@ Le bot sert une page temps réel sur http://localhost:8080 (`DASHBOARD_PORT`, 0 
 
 Sur un VPS, rien n'est exposé sur internet : `ssh -L 8080:localhost:8080 <vps>` puis ouvrir http://localhost:8080.
 
+## Suivi fantôme
+
+Brigitte note la marketcap de **chaque** token pump.fun annoncé, qu'elle l'achète ou non, dans la table `shadow_prices` (`mint`, `at`, `mcap_sol`, `complete`). Elle lit les bonding curves par lots de 100 toutes les `SHADOW_SECONDS` et n'enregistre un point que si la mcap bouge d'au moins 2 % (ou toutes les minutes). Le suivi s'arrête à la migration (`complete = 1`), après `SHADOW_HOURS`, ou quand le token est mort (sous 90 % de sa mcap de départ après 15 min).
+
+Avec la table `tokens` (dev buy, mcap à l'annonce, décision), on peut rejouer n'importe quelle règle d'entrée ou de sortie sur des milliers de tokens, sans attendre des trades paper. Exemple : part des tokens qui ont fait ×3 depuis leur annonce.
+
+```sql
+SELECT AVG(t.peak >= 3 * first.mcap_sol) FROM
+  (SELECT mint, MIN(at) AS at, MAX(mcap_sol) AS peak FROM shadow_prices GROUP BY mint) t
+  JOIN shadow_prices first ON first.mint = t.mint AND first.at = t.at;
+```
+
+Les positions réellement prises ont leur propre trajectoire dans `position_prices` (valeur de revente à chaque vérification).
+
 ## Telegram
 
 Brigitte envoie chaque achat et chaque vente sur Telegram et se pilote depuis le mobile.
@@ -90,6 +104,7 @@ Chaque contrôle qui échoue, ou qui ne peut pas être fait (RPC, RugCheck ou Ju
 | Extensions Token-2022 | mint on-chain | seules `metadataPointer` et `tokenMetadata` sont admises : pump.fun crée tous ses tokens en Token-2022 avec ces deux-là ; `transferHook`, `transferFeeConfig`, `permanentDelegate`, `pausable`… sont rejetées |
 | Liquidité | bonding curve | ≥ `MIN_LIQUIDITY_SOL` SOL réels |
 | Score RugCheck | api.rugcheck.xyz | aucun risque « danger » (dont l'historique de rug du créateur) et score ≤ `MAX_RUG_SCORE` |
+| Liquidité verrouillée | RugCheck | chaque pool du token a au moins `MIN_LP_LOCKED_PCT` % de sa liquidité verrouillée ou brûlée ; pool inconnue = refus |
 | Holders | RugCheck | hors comptes de programme (bonding curve, pool, coffre) : plus gros ≤ `MAX_HOLDER_PCT`, top 10 ≤ `MAX_TOP10_PCT`, insiders ≤ `MAX_INSIDER_PCT` |
 | Créateur | RugCheck + base locale | ≤ `MAX_CREATOR_LAUNCHES_24H` lancements en 24 h ; liste noire si un de ses tokens nous a coûté ≥ `RUG_LOSS_PCT` % |
 | Honeypot | quotes Jupiter | achat puis revente simulés : il faut une route de vente et une perte d'aller-retour ≤ `MAX_ROUNDTRIP_LOSS_PCT` (~3 % normal) | En paper, le prix vient de la curve on-chain et le coût inclut frais, tx et rent : les résultats sont pessimistes plutôt qu'optimistes.
