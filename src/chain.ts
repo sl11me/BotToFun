@@ -12,8 +12,27 @@ export async function fetchCurve(bondingCurveKey: string): Promise<Curve> {
   if (!res.ok) throw new Error(`RPC ${res.status}`);
   const { result, error } = (await res.json()) as any;
   if (error || !result?.value) throw new Error(`curve introuvable : ${error?.message ?? bondingCurveKey}`);
-  const b = Buffer.from(result.value.data[0], "base64");
-  return { vTokens: b.readBigUInt64LE(8), vSol: b.readBigUInt64LE(16), complete: b[48] === 1 };
+  return decodeCurve(Buffer.from(result.value.data[0], "base64"));
+}
+
+const PUMP_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+const decodeCurve = (b: Buffer): Curve => ({ vTokens: b.readBigUInt64LE(8), vSol: b.readBigUInt64LE(16), complete: b[48] === 1 });
+
+/** Jusqu'à 100 curves en un appel, 49 premiers octets seulement ; null pour un compte introuvable. */
+export async function fetchCurves(keys: string[]): Promise<(Curve | null)[]> {
+  const res = await fetch(config.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getMultipleAccounts", params: [keys, { encoding: "base64", commitment: "confirmed", dataSlice: { offset: 0, length: 49 } }] }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`RPC ${res.status}`);
+  const { result, error } = (await res.json()) as any;
+  if (error || !result?.value) throw new Error(`getMultipleAccounts : ${error?.message ?? "réponse vide"}`);
+  return result.value.map((v: any) => {
+    const b = v?.owner === PUMP_PROGRAM ? Buffer.from(v.data[0], "base64") : null;
+    return b && b.length >= 49 ? decodeCurve(b) : null;
+  });
 }
 
 // ipfs.io, dweb.link, w3s.link… ne servent plus de JSON (page « service worker gateway ») : passerelles testées le 03/11/2026.

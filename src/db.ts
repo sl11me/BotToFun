@@ -3,6 +3,8 @@ import { config } from "./config.ts";
 import type { NewToken } from "./strategy.ts";
 
 const db = new DatabaseSync(config.dbPath);
+// WAL + attente : une lecture externe (sqlite3, agents planifiés) ne fait plus échouer les écritures du bot.
+db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
 db.exec(`
   CREATE TABLE IF NOT EXISTS positions (
     mint TEXT PRIMARY KEY,
@@ -38,6 +40,14 @@ db.exec(`
     value_lamports TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS position_prices_mint ON position_prices (mint);
+  -- Suivi fantôme : mcap (SOL) des tokens pump.fun après leur annonce, achetés ou non (voir shadow.ts).
+  CREATE TABLE IF NOT EXISTS shadow_prices (
+    mint TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    mcap_sol REAL NOT NULL,
+    complete INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS shadow_prices_mint ON shadow_prices (mint, at);
 `);
 // Migration des bases créées avant le suivi multi-plateformes.
 if (!(db.prepare("PRAGMA table_info(tokens)").all() as { name: string }[]).some((c) => c.name === "platform"))
@@ -74,6 +84,10 @@ export function updatePeak(mint: string, peak: bigint) {
 
 export function logPrice(mint: string, valueLamports: bigint) {
   db.prepare("INSERT INTO position_prices (mint, at, value_lamports) VALUES (?, ?, ?)").run(mint, Date.now(), valueLamports.toString());
+}
+
+export function logShadow(mint: string, at: number, mcapSol: number, complete = false) {
+  db.prepare("INSERT INTO shadow_prices (mint, at, mcap_sol, complete) VALUES (?, ?, ?, ?)").run(mint, at, mcapSol, complete ? 1 : 0);
 }
 
 export function closePosition(mint: string, proceedsLamports: bigint, reason: string) {

@@ -5,6 +5,7 @@ import { fetchBalance, fetchCurve, fetchMetadata, fetchMint, fetchRugReport } fr
 import { config } from "./config.ts";
 import { closePosition, isBlacklisted, isKnown, logPrice, logToken, openPosition, openPositions, realizedPnlSol, updatePeak, type Position } from "./db.ts";
 import { onNewLaunch, onNewToken } from "./feed.ts";
+import { shadowTrack } from "./shadow.ts";
 import { h, isMint, notify, startTelegram } from "./telegram.ts";
 import { closeTokenAccount, quote, SOL_MINT, swap, tokenInfo, walletAddress } from "./jupiter.ts";
 import {
@@ -172,6 +173,7 @@ onNewToken((t) => {
   }
   if (!config.platforms.includes("pump.fun")) return;
   const token = { ...t, platform: "pump.fun" };
+  if (t.bondingCurveKey) shadowTrack(t.mint, t.bondingCurveKey, t.marketCapSol);
   const reason = rejectReason(t, config);
   if (reason) return isKnown(t.mint) || logToken(token, reason);
   consider(token, () => evaluate(t));

@@ -150,6 +150,7 @@ export type RugReport = {
   topHolders: { owner: string; pct: number; insider: boolean }[] | null;
   creatorTokens: { createdAt: string }[] | null;
   tokenMeta?: { uri?: string } | null; // URI des métadonnées, quelle que soit la plateforme
+  markets?: { marketType: string; lp?: { lpLockedPct: number } | null }[] | null; // pools du token et part de LP verrouillée
 };
 
 export type SecurityRules = {
@@ -158,6 +159,7 @@ export type SecurityRules = {
   maxHolderPct: number;
   maxInsiderPct: number;
   maxCreatorLaunches24h: number;
+  minLpLockedPct: number;
 };
 
 /** Données de marché Jupiter (USD) utiles à l'entrée hors pump.fun. */
@@ -182,6 +184,10 @@ export function rugReason(r: RugReport, isPool: (owner: string) => boolean, now:
   const danger = r.risks?.find((x) => x.level === "danger");
   if (danger) return `rugcheck : ${danger.name}`;
   if (r.score_normalised > rules.maxRugScore) return `rugcheck score ${r.score_normalised} > ${rules.maxRugScore}`;
+  // Liquidité verrouillée sur chaque pool (bonding curve, LP brûlée…) ; sans pool connue on ne peut pas vérifier : refus.
+  if (!r.markets?.length) return "liquidité verrouillée inconnue";
+  const unlocked = r.markets.find((m) => (m.lp?.lpLockedPct ?? 0) < rules.minLpLockedPct);
+  if (unlocked) return `liquidité verrouillée ${(unlocked.lp?.lpLockedPct ?? 0).toFixed(0)}% < ${rules.minLpLockedPct} (${unlocked.marketType})`;
 
   const holders = (r.topHolders ?? []).filter((h) => !isPool(h.owner)).sort((a, b) => b.pct - a.pct);
   const biggest = holders[0]?.pct ?? 0;
@@ -193,4 +199,18 @@ export function rugReason(r: RugReport, isPool: (owner: string) => boolean, now:
 
   const launches = (r.creatorTokens ?? []).filter((t) => now - Date.parse(t.createdAt) < 86_400_000).length;
   return launches > rules.maxCreatorLaunches24h ? `créateur ${launches} lancements/24h > ${rules.maxCreatorLaunches24h}` : null;
+}
+
+/** Token en suivi fantôme : mcap et instant de départ, puis du dernier point enregistré. */
+export type Shadow = { startAt: number; startMcap: number; lastAt: number; lastMcap: number };
+
+/**
+ * Suivi fantôme : enregistrer ce point (variation ≥ 2 % ou 60 s sans point) ; arrêter à la migration,
+ * après `hours`, ou quand le token est mort (sous 90 % de sa mcap de départ après 15 min).
+ */
+export function shadowStep(s: Shadow, mcap: number, complete: boolean, now: number, hours: number): { store: boolean; stop: boolean } {
+  const age = now - s.startAt;
+  // shortcut: un token « mort » qui repart après 15 min n'est plus suivi ; relâcher la règle si l'analyse en montre.
+  const stop = complete || age >= hours * 3_600_000 || (age >= 15 * 60_000 && mcap <= s.startMcap * 0.9);
+  return { store: stop || Math.abs(mcap / s.lastMcap - 1) >= 0.02 || now - s.lastAt >= 60_000, stop };
 }

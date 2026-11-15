@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buyQuote, exitReason, inflowReason, liquidityReason, mcapSol, mintReason, marketReason, platformOf, rejectReason, roundTripReason, rugReason, sellQuote, socialReason, type NewToken } from "../src/strategy.ts";
+import { buyQuote, exitReason, inflowReason, liquidityReason, mcapSol, mintReason, marketReason, platformOf, rejectReason, roundTripReason, rugReason, sellQuote, shadowStep, socialReason, type NewToken } from "../src/strategy.ts";
 
 const rules = { minDevBuySol: 0.5, maxDevBuySol: 3, maxMcapSol: 45 };
 const tok: NewToken = {
@@ -71,7 +71,7 @@ test("liquidityReason et roundTripReason", () => {
 });
 
 test("rugReason : score, holders hors curve, insiders, créateur en série", () => {
-  const sec = { maxRugScore: 20, maxTop10Pct: 30, maxHolderPct: 10, maxInsiderPct: 10, maxCreatorLaunches24h: 3 };
+  const sec = { maxRugScore: 20, maxTop10Pct: 30, maxHolderPct: 10, maxInsiderPct: 10, maxCreatorLaunches24h: 3, minLpLockedPct: 100 };
   const now = Date.parse("2026-11-03T12:00:00Z");
   const isB = (owner: string) => owner === "B";
   const ok = {
@@ -79,8 +79,11 @@ test("rugReason : score, holders hors curve, insiders, créateur en série", () 
     risks: [],
     topHolders: [{ owner: "B", pct: 85, insider: false }, { owner: "DEV", pct: 5, insider: false }, { owner: "X", pct: 3, insider: false }],
     creatorTokens: [{ createdAt: "2026-11-03T11:59:00Z" }],
+    markets: [{ marketType: "pump_fun", lp: { lpLockedPct: 100 } }],
   };
   assert.equal(rugReason(ok, isB, now, sec), null); // les 85 % de la bonding curve ne comptent pas
+  assert.equal(rugReason({ ...ok, markets: [] }, isB, now, sec), "liquidité verrouillée inconnue");
+  assert.match(rugReason({ ...ok, markets: [...ok.markets, { marketType: "raydium", lp: { lpLockedPct: 40 } }] }, isB, now, sec)!, /verrouillée 40% < 100 \(raydium\)/);
   assert.match(rugReason({ ...ok, risks: [{ name: "Creator history of rugged tokens", level: "danger" }] }, isB, now, sec)!, /history of rugged/);
   assert.match(rugReason({ ...ok, risks: [{ name: "Low liquidity", level: "warn" }], score_normalised: 65 }, isB, now, sec)!, /score 65/);
   assert.match(rugReason({ ...ok, topHolders: [{ owner: "W", pct: 15, insider: false }] }, isB, now, sec)!, /plus gros holder/);
@@ -110,4 +113,15 @@ test("marketReason : liquidité, mcap et inflow convertis en SOL", () => {
   assert.match(marketReason({ ...good, mcap: 20_000 }, 200, r)!, /mcap 100.0/);
   assert.match(marketReason({ ...good, mcap: null }, 200, r)!, /mcap/); // inconnu = rejet
   assert.match(marketReason({ ...good, stats5m: null }, 200, r)!, /inflow 0.00/);
+});
+
+test("shadowStep : points utiles seulement, arrêt à la migration, après la durée ou à la mort du token", () => {
+  const min = 60_000, s = { startAt: 0, startMcap: 30, lastAt: 0, lastMcap: 30 };
+  assert.deepEqual(shadowStep(s, 30.3, false, 10_000, 2), { store: false, stop: false }); // +1 %, 10 s
+  assert.deepEqual(shadowStep(s, 31, false, 10_000, 2), { store: true, stop: false }); // +3 %
+  assert.deepEqual(shadowStep(s, 30, false, min, 2), { store: true, stop: false }); // point de garde chaque minute
+  assert.deepEqual(shadowStep(s, 400, true, 5 * min, 2), { store: true, stop: true }); // migré
+  assert.deepEqual(shadowStep({ ...s, lastAt: 119 * min }, 60, false, 120 * min, 2), { store: true, stop: true }); // durée max
+  assert.deepEqual(shadowStep(s, 26, false, 10 * min, 2).stop, false); // en baisse mais encore jeune
+  assert.deepEqual(shadowStep(s, 26, false, 15 * min, 2).stop, true); // mort après 15 min
 });
