@@ -1,7 +1,7 @@
 // En premier : le dashboard capture console.log dès le démarrage.
 import { startDashboard } from "./dashboard.ts";
 import { isOffCurveAddress, type Address } from "@solana/kit";
-import { fetchBalance, fetchCurve, fetchMetadata, fetchMint, fetchRugReport } from "./chain.ts";
+import { fetchBalance, fetchCurve, fetchCurves, fetchMetadata, fetchMint, fetchRugReport } from "./chain.ts";
 import { config } from "./config.ts";
 import { closePosition, isBlacklisted, isKnown, logPrice, logToken, openPosition, openPositions, realizedPnlSol, updatePeak, type Position } from "./db.ts";
 import { onNewLaunch, onNewToken } from "./feed.ts";
@@ -64,6 +64,26 @@ async function evaluate(t: NewToken): Promise<string> {
   return reason ?? simulateAndBuy(t, t.bondingCurveKey, curve);
 }
 
+/**
+ * ENTRY_MODE=creation : achat dès l'annonce, au prix de la curve lu à cet instant (latence réelle incluse).
+ * Ni délai, ni RugCheck, ni Jupiter : aucun ne connaît encore le token. La curve plafonne la perte (mcap ≥ ~28 SOL),
+ * le mint (autorités, extensions Token-2022) reste vérifié.
+ */
+async function evaluateAtCreation(t: NewToken, seenAt: number): Promise<string> {
+  if (isBlacklisted(t.traderPublicKey, config.rugLossPct)) return "créateur sur liste noire";
+  // PumpPortal annonce le token avant que le RPC voie sa curve en « confirmed » : quelques essais rapprochés.
+  const curveSoon = async (tries = 5): Promise<Curve> =>
+    fetchCurve(t.bondingCurveKey).catch(async (e) => (tries > 1 ? (await wait(0.4), curveSoon(tries - 1)) : Promise.reject(e)));
+  const [mint, curve] = await Promise.all([fetchMint(t.mint), curveSoon()]);
+  // Le plafond de mcap écarte les curves aberrantes et les lancements déjà pompés par un bundle dans le même bloc.
+  const reason =
+    mintReason(mint) ?? (curve.complete ? "déjà migré" : null) ?? (mcapSol(curve) > config.maxMcapSol ? `mcap ${mcapSol(curve)} > ${config.maxMcapSol} à l'achat` : null);
+  if (reason) return reason;
+  const slip = (mcapSol(curve) / t.marketCapSol - 1) * 100;
+  console.log(`[creation] ${t.symbol} curve lue en ${Date.now() - seenAt} ms, mcap ${slip >= 0 ? "+" : ""}${slip.toFixed(1)} % vs annonce`);
+  return simulateAndBuy(t, t.bondingCurveKey, curve);
+}
+
 /** LetsBonk, Raydium, Meteora DBC, Moonshot : mêmes contrôles de sécurité, marché lu chez Jupiter. */
 async function evaluateLaunch(l: Launch): Promise<string> {
   if (isBlacklisted(l.traderPublicKey, config.rugLossPct)) return "créateur sur liste noire";
@@ -90,9 +110,10 @@ async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve:
   if (openPositions().length + buying >= config.maxOpenPositions) return "capacité max";
   buying++;
   try {
-    // Simulation achat puis revente : un token invendable (honeypot) ou trop taxé échoue ici.
     const spend = lamports(config.buySol);
-    const simulated = await quote(SOL_MINT, t.mint, spend)
+    // Simulation achat puis revente : un token invendable (honeypot) ou trop taxé échoue ici.
+    // En entrée à la création, Jupiter ne connaît pas encore le token : la curve pump.fun garantit la revente.
+    const simulated = curve && config.entryMode === "creation" ? { out: buyQuote(curve, spend), back: spend } : await quote(SOL_MINT, t.mint, spend)
       .then(async (out) => ({ out, back: await quote(t.mint, SOL_MINT, out) }))
       .catch((e) => e as Error);
     if (simulated instanceof Error) {
@@ -118,8 +139,9 @@ async function simulateAndBuy(t: { mint: string; symbol: string }, bondingCurve:
   }
 }
 
-async function check(p: Position, forced?: string) {
-  const curve = p.bondingCurve ? await fetchCurve(p.bondingCurve) : null;
+/** `prefetched` : curve déjà lue par la boucle de suivi (null = introuvable), sinon lue ici. */
+async function check(p: Position, forced?: string, prefetched?: Curve | null) {
+  const curve = p.bondingCurve ? (prefetched === undefined ? await fetchCurve(p.bondingCurve) : prefetched) : null;
   // Hors curve pump.fun active (autre plateforme, ou token migré) : prix de revente demandé à Jupiter.
   const value = (curve && !curve.complete ? sellQuote(curve, p.tokenAmount) : await quote(p.mint, SOL_MINT, p.tokenAmount)) - txCost;
   const peak = value > p.peakLamports ? value : p.peakLamports;
@@ -176,7 +198,8 @@ onNewToken((t) => {
   if (t.bondingCurveKey) shadowTrack(t.mint, t.bondingCurveKey, t.marketCapSol);
   const reason = rejectReason(t, config);
   if (reason) return isKnown(t.mint) || logToken(token, reason);
-  consider(token, () => evaluate(t));
+  const seenAt = Date.now();
+  consider(token, () => (config.entryMode === "creation" ? evaluateAtCreation(t, seenAt) : evaluate(t)));
 });
 
 onNewLaunch((l) => consider(l, () => evaluateLaunch(l)));
@@ -261,8 +284,13 @@ void startTelegram(
   ],
 );
 
-setInterval(() => {
-  for (const p of openPositions()) void guarded(p.mint, () => check(p));
+setInterval(async () => {
+  const open = openPositions();
+  const pump = open.filter((p) => p.bondingCurve);
+  // Une seule requête pour toutes les curves : le RPC public limite le débit (429) dès quelques positions.
+  const curves = pump.length ? await fetchCurves(pump.map((p) => p.bondingCurve)).catch((e) => (console.error(`[check] ${(e as Error).message}`), null)) : [];
+  if (!curves) return;
+  for (const p of open) void guarded(p.mint, () => check(p, undefined, p.bondingCurve ? curves[pump.indexOf(p)] : undefined));
 }, config.pollSeconds * 1000);
 
 /** Adresse et solde du wallet, pour vérifier au démarrage que c'est le bon. Jamais la clé, même dans une erreur. */
