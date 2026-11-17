@@ -7,9 +7,15 @@ const num = (key: string, def: number) => {
 const mode = process.env.MODE ?? "paper";
 if (mode !== "paper" && mode !== "live") throw new Error(`MODE doit être paper ou live, reçu : ${mode}`);
 if (mode === "live" && !process.env.BS58_PRIVATE_KEY) throw new Error("MODE=live exige BS58_PRIVATE_KEY");
+// momentum : achat après ENTRY_DELAY_SECONDS si le token monte ; creation : achat dès l'annonce (pump.fun seulement).
+const entryMode = process.env.ENTRY_MODE ?? "momentum";
+if (entryMode !== "momentum" && entryMode !== "creation") throw new Error(`ENTRY_MODE doit être momentum ou creation, reçu : ${entryMode}`);
+// shortcut: Jupiter ne connaît pas un token de quelques secondes ; le live demandera un achat direct sur le programme pump.fun.
+if (mode === "live" && entryMode === "creation") throw new Error("ENTRY_MODE=creation est réservé au paper");
 
 export const config = {
   mode,
+  entryMode,
   privateKey: process.env.BS58_PRIVATE_KEY ?? "",
   rpcUrl: process.env.RPC_URL || "https://api.mainnet-beta.solana.com",
   jupiterApiKey: process.env.JUPITER_API_KEY ?? "",

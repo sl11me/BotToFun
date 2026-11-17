@@ -93,6 +93,8 @@ Mise à jour : `git pull && docker compose up -d --build`. Arrêter le bot local
 
 Parcours d'un token : filtre immédiat (pool, Mayhem, dev buy, mcap) → créateur pas sur liste noire → mint sûr + Telegram dans les métadonnées → attente `ENTRY_DELAY_SECONDS` → liquidité, inflow, mcap → RugCheck → simulation achat/revente → achat.
 
+Avec `ENTRY_MODE=creation` (paper seulement), un token pump.fun qui passe le filtre immédiat est acheté dès l'annonce : créateur pas sur liste noire → mint sûr → prix lu sur la curve à cet instant (latence et écart de prix vs l'annonce dans le log `[creation]`). RugCheck et Jupiter ne connaissent pas encore le token et sont sautés ; la curve plafonne la perte (mcap ≥ ~28 SOL).
+
 ### Sécurité
 
 Chaque contrôle qui échoue, ou qui ne peut pas être fait (RPC, RugCheck ou Jupiter indisponible), bloque l'achat.
