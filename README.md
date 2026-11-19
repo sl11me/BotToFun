@@ -1,8 +1,12 @@
 # Brigitte
 
+[![CI](https://github.com/sl11me/BotToFun/actions/workflows/ci.yml/badge.svg)](https://github.com/sl11me/BotToFun/actions/workflows/ci.yml)
+
 Bot de trading de memecoins Solana (repo `BotToFun`) sur pump.fun, LetsBonk, Raydium, Meteora DBC et Moonshot : détecte les nouveaux tokens, filtre, entre, sort sur TP / SL / timeout.
 
-Stack (voir `Technos.png`) : TypeScript (Node ≥ 24), Jupiter Swap V2, SQLite (`node:sqlite`), flux PumpPortal.
+> **Avertissement** : projet personnel à but éducatif. Il tourne en `MODE=paper` (simulation, aucun fonds engagé) par défaut. Ce n'est pas un conseil en investissement : les memecoins sont extrêmement risqués et la plupart des acheteurs y perdent. Le code est fourni sans garantie (voir [LICENSE](LICENSE)) ; toute utilisation en `live` se fait à vos risques.
+
+Stack : TypeScript (Node ≥ 24), Jupiter Swap V2, SQLite (`node:sqlite`), flux PumpPortal.
 
 ## Plateformes
 
@@ -26,7 +30,7 @@ Passer en réel : `MODE=live` + `BS58_PRIVATE_KEY` d'un **wallet dédié** conte
 
 ## Tableau de bord
 
-Le bot sert une page temps réel sur http://localhost:8080 (`DASHBOARD_PORT`, 0 pour la couper) : flux des nouveaux tokens et décision prise, entonnoir des rejets sur la dernière heure, positions ouvertes avec PnL latent, trades fermés, logs, et derniers rapports des agents (`reports/supervision.md`, `docs/apprentissage.md`).
+Le bot sert une page temps réel sur http://localhost:8080 (`DASHBOARD_PORT`, 0 pour la couper) : flux des nouveaux tokens et décision prise, entonnoir des rejets sur la dernière heure, positions ouvertes avec PnL latent, trades fermés, logs, et, s'ils existent en local, les derniers rapports d'analyse (`reports/supervision.md`, `docs/apprentissage.md`, non versionnés).
 
 Sur un VPS, rien n'est exposé sur internet : `ssh -L 8080:localhost:8080 <vps>` puis ouvrir http://localhost:8080.
 
@@ -109,7 +113,9 @@ Chaque contrôle qui échoue, ou qui ne peut pas être fait (RPC, RugCheck ou Ju
 | Liquidité verrouillée | RugCheck | chaque pool du token a au moins `MIN_LP_LOCKED_PCT` % de sa liquidité verrouillée ou brûlée ; pool inconnue = refus |
 | Holders | RugCheck | hors comptes de programme (bonding curve, pool, coffre) : plus gros ≤ `MAX_HOLDER_PCT`, top 10 ≤ `MAX_TOP10_PCT`, insiders ≤ `MAX_INSIDER_PCT` |
 | Créateur | RugCheck + base locale | ≤ `MAX_CREATOR_LAUNCHES_24H` lancements en 24 h ; liste noire si un de ses tokens nous a coûté ≥ `RUG_LOSS_PCT` % |
-| Honeypot | quotes Jupiter | achat puis revente simulés : il faut une route de vente et une perte d'aller-retour ≤ `MAX_ROUNDTRIP_LOSS_PCT` (~3 % normal) | En paper, le prix vient de la curve on-chain et le coût inclut frais, tx et rent : les résultats sont pessimistes plutôt qu'optimistes.
+| Honeypot | quotes Jupiter | achat puis revente simulés : il faut une route de vente et une perte d'aller-retour ≤ `MAX_ROUNDTRIP_LOSS_PCT` (~3 % normal) |
+
+En paper, le prix vient de la curve on-chain et le coût inclut frais, tx et rent : les résultats sont pessimistes plutôt qu'optimistes.
 
 Règles et sources : [docs/pumpfun-playbook.md](docs/pumpfun-playbook.md). Pistes d'optimisation : [docs/optimisations.md](docs/optimisations.md).
 
